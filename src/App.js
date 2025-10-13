@@ -21,6 +21,10 @@ import Register from "./pages/Register";
 import PageTransition from "./components/PageTransition";
 import Profile from "./pages/Profile";
 import Analytics from "./pages/Analytics"
+import Planner from "./pages/Planner";
+import GoogleCalendarTest from "./pages/GoogleCalendarTest";
+import Documents from "./pages/Documents"
+
 
 
 /* ✅ Layout Wrapper — handles Navbar/Footer visibility */
@@ -143,6 +147,24 @@ function App() {
   element={
     <ProtectedRoute>
       <Analytics />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/planner"
+  element={
+    <ProtectedRoute>
+      <Planner />
+    </ProtectedRoute>
+  }
+/>
+<Route path="/calendar-test" element={<GoogleCalendarTest />} />
+
+<Route
+  path="/documents"
+  element={
+    <ProtectedRoute>
+      <Documents />
     </ProtectedRoute>
   }
 />
