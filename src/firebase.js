@@ -2,10 +2,11 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
-// 🔥 Your Firebase configuration (replace with your own)
+// ✅ Your Firebase config
 const firebaseConfig = {
-  apiKey: "AIzaSyBADwbL_dUfTgroZFOBFvhLqJbEem3xQOk",
+ apiKey: "AIzaSyBADwbL_dUfTgroZFOBFvhLqJbEem3xQOk",
   authDomain: "taskmaster-app-642b7.firebaseapp.com",
   projectId: "taskmaster-app-642b7",
   storageBucket: "taskmaster-app-642b7.firebasestorage.app",
@@ -16,8 +17,9 @@ const firebaseConfig = {
 // ✅ Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// ✅ Export Auth and Firestore
+// ✅ Export instances
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+export const storage = getStorage(app);
 
 export default app;

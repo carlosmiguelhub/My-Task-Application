@@ -10,14 +10,20 @@ import { useDispatch, useSelector } from "react-redux";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { setUser, clearUser } from "./redux/slices/authSlice";
+import { AnimatePresence } from "framer-motion";
 
 import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
 import Dashboard from "./pages/Dashboard";
+import BoardView from "./pages/BoardView";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import Footer from "./components/Footer";
+import PageTransition from "./components/PageTransition";
+import Profile from "./pages/Profile";
+import Analytics from "./pages/Analytics"
 
-/* ✅ Layout wrapper: controls Navbar/Footer visibility */
+
+/* ✅ Layout Wrapper — handles Navbar/Footer visibility */
 function LayoutWrapper({ children }) {
   const location = useLocation();
 
@@ -32,20 +38,20 @@ function LayoutWrapper({ children }) {
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-slate-900 transition-colors duration-300">
       {!hideHeaderFooter && <Navbar />}
-      <main className="flex-grow">{children}</main>
+      <main className="flex-grow overflow-x-hidden">{children}</main>
       {!hideHeaderFooter && !hideFooter && <Footer />}
     </div>
   );
 }
 
-/* ✅ Protected Route: Restrict access to authenticated users only */
+/* ✅ Protected Route — restrict access for unauthenticated users */
 function ProtectedRoute({ children }) {
   const { user, loading } = useSelector((state) => state.auth);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-50 dark:bg-slate-900">
-        <div className="w-6 h-6 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+        <div className="w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -57,11 +63,12 @@ function ProtectedRoute({ children }) {
   return children;
 }
 
-/* ✅ Main App */
+/* ✅ Main App Component */
 function App() {
   const dispatch = useDispatch();
+  const location = useLocation();
 
-  // Sync Firebase Auth with Redux on load
+  // Sync Firebase Auth with Redux
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -80,26 +87,76 @@ function App() {
   }, [dispatch]);
 
   return (
-    <Router>
-      <LayoutWrapper>
-        <Routes>
+    <LayoutWrapper>
+      <AnimatePresence mode="wait">
+        <Routes location={location} key={location.pathname}>
           {/* Public Routes */}
-          <Route path="/" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route
+            path="/"
+            element={
+              <PageTransition>
+                <Login />
+              </PageTransition>
+            }
+          />
+          <Route
+            path="/register"
+            element={
+              <PageTransition>
+                <Register />
+              </PageTransition>
+            }
+          />
 
-          {/* Protected Dashboard */}
+          {/* Protected Routes */}
           <Route
             path="/dashboard"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <PageTransition>
+                  <Dashboard />
+                </PageTransition>
               </ProtectedRoute>
             }
           />
+
+          <Route
+            path="/board/:id"
+            element={
+              <ProtectedRoute>
+                <PageTransition>
+                  <BoardView />
+                </PageTransition>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+  path="/profile"
+  element={
+    <ProtectedRoute>
+      <Profile />
+    </ProtectedRoute>
+  }
+/>
+<Route
+  path="/analytics"
+  element={
+    <ProtectedRoute>
+      <Analytics />
+    </ProtectedRoute>
+  }
+/>
         </Routes>
-      </LayoutWrapper>
-    </Router>
+      </AnimatePresence>
+    </LayoutWrapper>
   );
 }
 
-export default App;
+/* ✅ Router Wrapper — ensures Router context for useLocation */
+export default function AppRouter() {
+  return (
+    <Router>
+      <App />
+    </Router>
+  );
+}

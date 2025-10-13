@@ -5,24 +5,30 @@ import {
   Home,
   LayoutGrid,
   Calendar,
+  Activity,
   Menu,
   ChevronLeft,
   ChevronRight,
   X,
+  Trash2,
 } from "lucide-react";
 import { useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { db } from "../firebase";
 import {
   collection,
   addDoc,
-  getDocs,
   onSnapshot,
   query,
   orderBy,
+  serverTimestamp,
+  deleteDoc,
+  doc,
 } from "firebase/firestore";
 
 const Dashboard = () => {
-  const { user } = useSelector((state) => state.auth); // ✅ Current logged user
+  const { user } = useSelector((state) => state.auth);
+  const navigate = useNavigate();
 
   const [boards, setBoards] = useState([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -31,6 +37,7 @@ const Dashboard = () => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [hoveredItem, setHoveredItem] = useState(null);
+  const [loadingBoards, setLoadingBoards] = useState(true);
 
   // ✅ Handle responsive sidebar
   useEffect(() => {
@@ -51,6 +58,7 @@ const Dashboard = () => {
         ...doc.data(),
       }));
       setBoards(boardList);
+      setLoadingBoards(false);
     });
 
     return () => unsubscribe();
@@ -63,7 +71,7 @@ const Dashboard = () => {
     try {
       await addDoc(collection(db, "users", user.uid, "boards"), {
         title: newBoardName.trim(),
-        createdAt: new Date(),
+        createdAt: serverTimestamp(),
       });
       setNewBoardName("");
       setIsModalOpen(false);
@@ -72,10 +80,22 @@ const Dashboard = () => {
     }
   };
 
+  // ✅ Delete a board
+  const handleDeleteBoard = async (boardId) => {
+    if (!user) return;
+    try {
+      await deleteDoc(doc(db, "users", user.uid, "boards", boardId));
+    } catch (error) {
+      console.error("Error deleting board:", error);
+    }
+  };
+
+  // ✅ Sidebar Menu
   const menuItems = [
-    { name: "Home", icon: <Home size={20} /> },
-    { name: "Boards", icon: <LayoutGrid size={20} /> },
-    { name: "Planner", icon: <Calendar size={20} /> },
+    { name: "Home", icon: <Home size={20} />, path: "/dashboard" },
+    { name: "Boards", icon: <LayoutGrid size={20} />, path: "/dashboard" },
+    { name: "Planner", icon: <Calendar size={20} />, path: "/planner" },
+    { name: "Analytics", icon: <Activity size={20} />, path: "/analytics" }, // ✅ Added
   ];
 
   return (
@@ -97,6 +117,7 @@ const Dashboard = () => {
             {menuItems.map((item, index) => (
               <div
                 key={item.name}
+                onClick={() => navigate(item.path)}
                 onMouseEnter={() => setHoveredItem(index)}
                 onMouseLeave={() => setHoveredItem(null)}
                 className="relative flex items-center gap-3 p-2 rounded-lg cursor-pointer text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition group"
@@ -157,7 +178,10 @@ const Dashboard = () => {
               {menuItems.map((item) => (
                 <div
                   key={item.name}
-                  onClick={() => setIsMobileOpen(false)}
+                  onClick={() => {
+                    navigate(item.path);
+                    setIsMobileOpen(false);
+                  }}
                   className="flex items-center gap-3 p-2 rounded-lg cursor-pointer text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                 >
                   {item.icon}
@@ -195,16 +219,49 @@ const Dashboard = () => {
           Your Boards
         </h1>
 
-        {boards.length === 0 ? (
+        {loadingBoards ? (
+          <div className="flex justify-center items-center mt-20">
+            <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+          </div>
+        ) : boards.length === 0 ? (
           <p className="text-slate-500 dark:text-slate-400 text-center mt-10">
             No boards yet. Create one below 👇
           </p>
         ) : (
-          <div className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 w-full max-w-6xl mx-auto">
+          <motion.div
+            className="grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 w-full max-w-6xl mx-auto"
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: {},
+              visible: { transition: { staggerChildren: 0.08 } },
+            }}
+          >
             {boards.map((board) => (
-              <BoardCard key={board.id} title={board.title} />
+              <motion.div
+                key={board.id}
+                variants={{
+                  hidden: { opacity: 0, y: 20 },
+                  visible: { opacity: 1, y: 0 },
+                }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+                className="relative group cursor-pointer"
+                onClick={() => navigate(`/board/${board.id}`)}
+              >
+                <BoardCard title={board.title} boardId={board.id} />
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDeleteBoard(board.id);
+                  }}
+                  className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 bg-red-500 text-white p-1 rounded-full transition"
+                  title="Delete Board"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </motion.div>
             ))}
-          </div>
+          </motion.div>
         )}
 
         {/* Add new board card */}
@@ -216,38 +273,51 @@ const Dashboard = () => {
         </div>
 
         {/* ===== Modal ===== */}
-        {isModalOpen && (
-          <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm transition-all">
-            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg w-[90%] max-w-md p-6 border border-slate-200 dark:border-slate-700 transition-all duration-300">
-              <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-4">
-                Create New Board
-              </h2>
+        <AnimatePresence>
+          {isModalOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm"
+            >
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                transition={{ duration: 0.25 }}
+                className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg w-[90%] max-w-md p-6 border border-slate-200 dark:border-slate-700"
+              >
+                <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-4">
+                  Create New Board
+                </h2>
 
-              <input
-                type="text"
-                placeholder="Enter board name..."
-                value={newBoardName}
-                onChange={(e) => setNewBoardName(e.target.value)}
-                className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-400 outline-none transition"
-              />
+                <input
+                  type="text"
+                  placeholder="Enter board name..."
+                  value={newBoardName}
+                  onChange={(e) => setNewBoardName(e.target.value)}
+                  className="w-full border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-400 outline-none transition"
+                />
 
-              <div className="flex justify-end gap-3 mt-5">
-                <button
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddBoard}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-500 transition"
-                >
-                  Add Board
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+                <div className="flex justify-end gap-3 mt-5">
+                  <button
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-4 py-2 rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddBoard}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-500 transition"
+                  >
+                    Add Board
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </div>
   );
