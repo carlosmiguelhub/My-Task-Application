@@ -6,7 +6,7 @@ import {
   LayoutGrid,
   Calendar,
   Activity,
-  FileText, // ✅ added for Documents
+  FileText,
   Menu,
   ChevronLeft,
   ChevronRight,
@@ -30,7 +30,6 @@ import {
   serverTimestamp,
   deleteDoc,
   doc,
-  limit,
   getDocs,
 } from "firebase/firestore";
 
@@ -143,6 +142,7 @@ const Dashboard = () => {
       setIsModalOpen(false);
     } catch (error) {
       console.error("Error adding board:", error);
+      console.log("🔥 Logged in UID:", user?.uid);
     }
   };
 
@@ -161,7 +161,7 @@ const Dashboard = () => {
     { name: "Home", icon: <Home size={20} />, action: () => setActivePage("home") },
     { name: "Boards", icon: <LayoutGrid size={20} />, action: () => setActivePage("boards") },
     { name: "Planner", icon: <Calendar size={20} />, path: "/planner" },
-    { name: "Documents", icon: <FileText size={20} />, path: "/documents" }, // ✅ NEW Sidebar Item
+    { name: "Documents", icon: <FileText size={20} />, path: "/documents" },
     { name: "Analytics", icon: <Activity size={20} />, path: "/analytics" },
   ];
 
@@ -210,14 +210,71 @@ const Dashboard = () => {
             onClick={() => setIsCollapsed(!isCollapsed)}
             className="absolute -right-3 top-1/2 -translate-y-1/2 bg-indigo-600 text-white p-2 rounded-full shadow-md hover:bg-indigo-700 transition-all duration-300 hidden md:flex"
           >
-            {isCollapsed ? (
-              <ChevronRight size={16} />
-            ) : (
-              <ChevronLeft size={16} />
-            )}
+            {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+          </button>
+          
+        </div>
+        
+      </motion.div>
+      {/* ===== ✅ Mobile Sidebar Drawer ===== */}
+<AnimatePresence>
+  {isMobileOpen && (
+    <>
+      {/* Background overlay (click to close) */}
+      <motion.div
+        className="fixed inset-0 bg-black bg-opacity-40 z-40"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={() => setIsMobileOpen(false)}
+      ></motion.div>
+
+      {/* Sidebar drawer */}
+      <motion.div
+        initial={{ x: -250 }}
+        animate={{ x: 0 }}
+        exit={{ x: -250 }}
+        transition={{ type: "spring", stiffness: 100, damping: 20 }}
+        className="fixed inset-y-0 left-0 w-60 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 z-50 p-4"
+      >
+        <div className="flex justify-between items-center mb-6">
+          <h1 className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+            Task Master
+          </h1>
+          <button
+            onClick={() => setIsMobileOpen(false)}
+            className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+          >
+            <X size={20} className="text-slate-600 dark:text-slate-300" />
           </button>
         </div>
+
+        {/* Mobile Nav Menu (same as desktop menuItems) */}
+        <nav className="space-y-2">
+          {menuItems.map((item) => (
+            <div
+              key={item.name}
+              onClick={() => {
+                if (item.action) item.action();
+                if (item.path) navigate(item.path);
+                setIsMobileOpen(false);
+              }}
+              className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition ${
+                activePage === item.name.toLowerCase()
+                  ? "bg-indigo-100 dark:bg-slate-800"
+                  : ""
+              }`}
+            >
+              {item.icon}
+              <span className="font-medium">{item.name}</span>
+            </div>
+          ))}
+        </nav>
       </motion.div>
+    </>
+  )}
+</AnimatePresence>
+
 
       {/* ===== Main Content ===== */}
       <motion.div
@@ -397,6 +454,39 @@ const Dashboard = () => {
               </span>
             </div>
           </>
+        )}
+
+        {/* ===== Create Board Modal ===== */}
+        {isModalOpen && (
+          <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-6 w-80 relative">
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                <X size={18} />
+              </button>
+
+              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
+                Create New Board
+              </h2>
+
+              <input
+                type="text"
+                placeholder="Enter board name"
+                value={newBoardName}
+                onChange={(e) => setNewBoardName(e.target.value)}
+                className="w-full border border-gray-300 dark:border-slate-700 rounded-lg p-2 mb-4 bg-transparent text-gray-800 dark:text-gray-100"
+              />
+
+              <button
+                onClick={handleAddBoard}
+                className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 transition"
+              >
+                Create
+              </button>
+            </div>
+          </div>
         )}
       </motion.div>
     </div>

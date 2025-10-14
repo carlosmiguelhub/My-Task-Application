@@ -1,50 +1,84 @@
-
-
 import React, { useEffect, useState } from "react";
 import { gapi } from "gapi-script";
 
 const GoogleCalendarTest = () => {
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const CLIENT_ID = "117240353621-3k3kcvpfj42he8qtp76nfo0dp2u1ftr5.apps.googleusercontent.com";
+  const API_KEY = "AIzaSyAa5iK_TyMaJ2YN9ZEVGCpjteCVLzhM4XY";
+  const SCOPES = "https://www.googleapis.com/auth/calendar.readonly";
 
   useEffect(() => {
-  function start() {
+    // 🧠 Catch hidden script errors
+    window.onerror = function (msg, url, line, col, error) {
+      console.error("Global error:", msg, "at", url, "line:", line, "col:", col, "error:", error);
+    };
 
-    const CLIENT_ID = "117240353621-3k3kcvpfj42he8qtp76nfo0dp2u1ftr5.apps.googleusercontent.com";
-    const API_KEY = "AIzaSyAa5iK_TyMaJ2YN9ZEVGCpjteCVLzhM4XY";
-    const SCOPES = "https://www.googleapis.com/auth/calendar.events";
+    const initClient = async () => {
+      try {
+        await gapi.client.init({
+          apiKey: API_KEY,
+          clientId: CLIENT_ID,
+          discoveryDocs: [
+            "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
+          ],
+          scope: SCOPES,
+        });
 
-    gapi.client
-      .init({
-        apiKey: API_KEY,
-        clientId: CLIENT_ID,
-        discoveryDocs: [
-          "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest",
-        ],
-        scope: SCOPES,
-      })
-      .then(() => {
         const auth = gapi.auth2.getAuthInstance();
         setIsSignedIn(auth.isSignedIn.get());
         auth.isSignedIn.listen(setIsSignedIn);
-      });
-  }
-  gapi.load("client:auth2", start);
-}, []);
 
-  const handleSignIn = () => gapi.auth2.getAuthInstance().signIn();
-  const handleSignOut = () => gapi.auth2.getAuthInstance().signOut();
+        console.log("✅ GAPI initialized successfully");
+      } catch (err) {
+        console.error("❌ GAPI initialization error:", err);
+      }
+    };
+
+    // Load client & auth2 modules before init
+    gapi.load("client:auth2", initClient);
+  }, []);
+
+  const handleSignIn = async () => {
+    try {
+      await gapi.auth2.getAuthInstance().signIn();
+      console.log("🔓 Signed in successfully");
+    } catch (err) {
+      console.error("Sign-in error:", err);
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await gapi.auth2.getAuthInstance().signOut();
+      console.log("🔒 Signed out successfully");
+      setEvents([]);
+    } catch (err) {
+      console.error("Sign-out error:", err);
+    }
+  };
 
   const fetchEvents = async () => {
-    const response = await gapi.client.calendar.events.list({
-      calendarId: "primary",
-      timeMin: new Date().toISOString(),
-      showDeleted: false,
-      singleEvents: true,
-      maxResults: 10,
-      orderBy: "startTime",
-    });
-    setEvents(response.result.items);
+    try {
+      setLoading(true);
+      const response = await gapi.client.calendar.events.list({
+        calendarId: "primary",
+        timeMin: new Date().toISOString(),
+        showDeleted: false,
+        singleEvents: true,
+        maxResults: 10,
+        orderBy: "startTime",
+      });
+
+      setEvents(response.result.items || []);
+      console.log("📅 Events fetched:", response.result.items);
+    } catch (err) {
+      console.error("❌ Error fetching events:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -67,25 +101,32 @@ const GoogleCalendarTest = () => {
             </button>
             <button
               onClick={fetchEvents}
-              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition"
+              disabled={loading}
+              className="px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition disabled:opacity-50"
             >
-              Fetch Events
+              {loading ? "Loading..." : "Fetch Events"}
             </button>
           </div>
 
           <h2 className="text-lg font-semibold mb-3">Upcoming Events</h2>
           <ul className="space-y-2">
-            {events.map((event) => (
-              <li
-                key={event.id}
-                className="border border-slate-200 dark:border-slate-700 p-3 rounded-lg shadow-sm"
-              >
-                <strong>{event.summary}</strong>
-                <p className="text-sm text-slate-500">
-                  {new Date(event.start.dateTime || event.start.date).toLocaleString()}
-                </p>
-              </li>
-            ))}
+            {events.length > 0 ? (
+              events.map((event) => (
+                <li
+                  key={event.id}
+                  className="border border-slate-200 dark:border-slate-700 p-3 rounded-lg shadow-sm"
+                >
+                  <strong>{event.summary || "(No title)"}</strong>
+                  <p className="text-sm text-slate-500">
+                    {event.start?.dateTime
+                      ? new Date(event.start.dateTime).toLocaleString()
+                      : new Date(event.start?.date).toLocaleDateString()}
+                  </p>
+                </li>
+              ))
+            ) : (
+              <p className="text-slate-500 text-sm">No upcoming events found.</p>
+            )}
           </ul>
         </>
       )}

@@ -1,5 +1,9 @@
 import React, { useState } from "react";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
+import {
+  createUserWithEmailAndPassword,
+  updateProfile,
+  sendEmailVerification,
+} from "firebase/auth";
 import { useNavigate, Link } from "react-router-dom";
 import { auth } from "../firebase";
 import { getFirestore, doc, setDoc } from "firebase/firestore";
@@ -51,6 +55,7 @@ const Register = () => {
     }
 
     try {
+      // ✅ Create the user
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
@@ -58,7 +63,10 @@ const Register = () => {
       );
       const user = userCredential.user;
 
+      // ✅ Update user profile (display name)
       await updateProfile(user, { displayName: fullname });
+
+      // ✅ Store additional info in Firestore
       await setDoc(doc(db, "users", user.uid), {
         fullname,
         phone,
@@ -66,7 +74,13 @@ const Register = () => {
         createdAt: new Date(),
       });
 
-      setSuccess("Account created successfully! Please log in to continue.");
+      // ✅ Send verification email
+      await sendEmailVerification(user);
+
+      // ✅ Success message
+      setSuccess(
+        "Account created! A verification link has been sent to your email. Please verify before logging in."
+      );
       setFormData({
         fullname: "",
         phone: "",
@@ -74,9 +88,20 @@ const Register = () => {
         password: "",
         confirmPassword: "",
       });
+
+      // Optional: Redirect to login after a short delay
+      setTimeout(() => navigate("/"), 4000);
     } catch (err) {
       console.error(err);
-      setError("Registration failed. Please try again.");
+      if (err.code === "auth/email-already-in-use") {
+        setError("This email is already registered.");
+      } else if (err.code === "auth/invalid-email") {
+        setError("Invalid email address.");
+      } else if (err.code === "auth/weak-password") {
+        setError("Password should be at least 6 characters.");
+      } else {
+        setError("Registration failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -99,6 +124,7 @@ const Register = () => {
           Join Task Master and get productive!
         </p>
 
+        {/* ✅ Error Message */}
         {error && (
           <motion.p
             key={error}
@@ -110,6 +136,7 @@ const Register = () => {
           </motion.p>
         )}
 
+        {/* ✅ Success Message */}
         {success && (
           <motion.p
             key={success}
@@ -152,7 +179,8 @@ const Register = () => {
             required
           />
 
-          {[ 
+          {/* Password + Confirm Password Fields */}
+          {[
             {
               name: "password",
               placeholder: "Password",

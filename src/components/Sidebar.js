@@ -18,6 +18,7 @@ const Sidebar = () => {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const location = useLocation();
 
+  // ✅ Update on resize
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
     window.addEventListener("resize", handleResize);
@@ -85,47 +86,66 @@ const Sidebar = () => {
       {/* ===== Mobile Drawer ===== */}
       <AnimatePresence>
         {isMobileOpen && (
-          <motion.div
-            initial={{ x: -250 }}
-            animate={{ x: 0 }}
-            exit={{ x: -250 }}
-            transition={{ type: "spring", stiffness: 100, damping: 20 }}
-            className="fixed inset-y-0 left-0 w-60 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 z-50 p-4"
-          >
-            <div className="flex justify-between items-center mb-6">
-              <h1 className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
-                Task Master
-              </h1>
-              <button
-                onClick={() => setIsMobileOpen(false)}
-                className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
-              >
-                <X size={20} className="text-slate-600 dark:text-slate-300" />
-              </button>
-            </div>
+          <>
+            {/* ✅ Background overlay */}
+            <motion.div
+              className="fixed inset-0 bg-black bg-opacity-40 z-40"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsMobileOpen(false)}
+            ></motion.div>
 
-            <nav className="space-y-2">
-              {menuItems.map((item) => (
-                <Link
-                  key={item.name}
-                  to={item.path}
+            {/* ✅ Sidebar Drawer */}
+            <motion.div
+              initial={{ x: -250 }}
+              animate={{ x: 0 }}
+              exit={{ x: -250 }}
+              transition={{ type: "spring", stiffness: 100, damping: 20 }}
+              className="fixed inset-y-0 left-0 w-60 bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-700 z-50 p-4"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h1 className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+                  Task Master
+                </h1>
+                <button
                   onClick={() => setIsMobileOpen(false)}
-                  className="flex items-center gap-3 p-2 rounded-lg cursor-pointer text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  className="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                 >
-                  {item.icon}
-                  <span className="font-medium">{item.name}</span>
-                </Link>
-              ))}
-            </nav>
-          </motion.div>
+                  <X size={20} className="text-slate-600 dark:text-slate-300" />
+                </button>
+              </div>
+
+              <nav className="space-y-2">
+                {menuItems.map((item) => {
+                  const isActive = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.name}
+                      to={item.path}
+                      onClick={() => setIsMobileOpen(false)}
+                      className={`flex items-center gap-3 p-2 rounded-lg transition-all ${
+                        isActive
+                          ? "bg-indigo-100 dark:bg-indigo-700 text-indigo-600 dark:text-white"
+                          : "text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
+                      }`}
+                    >
+                      {item.icon}
+                      <span className="font-medium">{item.name}</span>
+                    </Link>
+                  );
+                })}
+              </nav>
+            </motion.div>
+          </>
         )}
       </AnimatePresence>
 
-      {/* Mobile trigger button (top left corner) */}
+      {/* ✅ Mobile trigger button (always visible on top) */}
       {isMobile && (
         <button
           onClick={() => setIsMobileOpen(true)}
-          className="md:hidden fixed top-4 left-4 p-2 bg-indigo-600 text-white rounded-lg shadow-lg z-50 hover:bg-indigo-700 transition"
+          className="md:hidden fixed top-4 left-4 p-2 bg-indigo-600 text-white rounded-lg shadow-lg z-[9999] hover:bg-indigo-700 transition"
         >
           <Menu size={20} />
         </button>

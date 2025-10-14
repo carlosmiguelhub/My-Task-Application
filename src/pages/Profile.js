@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
-import { db, storage } from "../firebase";
+import { db, storage, auth } from "../firebase";
 import { doc, getDoc } from "firebase/firestore";
 import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { sendPasswordResetEmail } from "firebase/auth";
 import { motion, AnimatePresence } from "framer-motion";
-import { Camera, Settings, Activity, ArrowLeft } from "lucide-react";
+import { Camera, Settings, Activity, ArrowLeft, Lock, CheckCircle, XCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const Profile = () => {
@@ -20,6 +21,7 @@ const Profile = () => {
   const [file, setFile] = useState(null);
   const [activeTab, setActiveTab] = useState("settings");
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null); // ✅ floating toast
 
   // ✅ Load user info
   useEffect(() => {
@@ -60,6 +62,29 @@ const Profile = () => {
     }
   };
 
+  // ✅ Send password reset email
+  const handlePasswordReset = async () => {
+    if (!user || !user.email) return;
+
+    try {
+      setLoading(true);
+      await sendPasswordResetEmail(auth, user.email);
+      setToast({
+        type: "success",
+        message: `Password reset email sent to ${user.email}.`,
+      });
+    } catch (error) {
+      console.error("Error sending password reset:", error);
+      setToast({
+        type: "error",
+        message: "Failed to send reset email. Please try again.",
+      });
+    } finally {
+      setLoading(false);
+      setTimeout(() => setToast(null), 4000); // hide after 4s
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-screen bg-slate-50 dark:bg-slate-900">
@@ -69,7 +94,31 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-slate-100 dark:from-slate-900 dark:to-slate-950 text-slate-900 dark:text-white p-6 md:p-10 transition-colors duration-300">
+    <div className="relative min-h-screen bg-gradient-to-br from-indigo-50 to-slate-100 dark:from-slate-900 dark:to-slate-950 text-slate-900 dark:text-white p-6 md:p-10 transition-colors duration-300">
+      {/* ✅ Floating Toast */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, x: 50, y: -20 }}
+            animate={{ opacity: 1, x: 0, y: 0 }}
+            exit={{ opacity: 0, x: 50, y: -20 }}
+            transition={{ duration: 0.4 }}
+            className={`fixed top-6 right-6 z-50 flex items-center gap-3 px-4 py-3 rounded-lg shadow-lg text-sm font-medium backdrop-blur-md border ${
+              toast.type === "success"
+                ? "bg-green-500/10 text-green-400 border-green-500/20"
+                : "bg-red-500/10 text-red-400 border-red-500/20"
+            }`}
+          >
+            {toast.type === "success" ? (
+              <CheckCircle size={18} />
+            ) : (
+              <XCircle size={18} />
+            )}
+            {toast.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <button
@@ -186,8 +235,34 @@ const Profile = () => {
                   <label className="text-sm text-slate-500 dark:text-slate-400">
                     Theme: <span className="ml-2">Auto (System)</span>
                   </label>
-                  <button className="mt-4 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium w-fit">
-                    Change Password
+
+                  {/* ✅ Change Password Button */}
+                  <button
+                    onClick={handlePasswordReset}
+                    disabled={loading}
+                    className={`mt-4 flex items-center gap-2 bg-gradient-to-r from-indigo-600 via-indigo-500 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium w-fit transition ${
+                      loading ? "opacity-70 cursor-not-allowed" : ""
+                    }`}
+                  >
+                    {loading ? (
+                      <>
+                        <motion.span
+                          animate={{ rotate: 360 }}
+                          transition={{
+                            repeat: Infinity,
+                            duration: 1,
+                            ease: "linear",
+                          }}
+                          className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
+                        ></motion.span>
+                        Sending...
+                      </>
+                    ) : (
+                      <>
+                        <Lock size={14} className="opacity-80" />
+                        Change Password
+                      </>
+                    )}
                   </button>
                 </div>
               </motion.div>
