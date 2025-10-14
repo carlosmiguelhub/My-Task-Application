@@ -12,6 +12,7 @@ import { auth } from "./firebase";
 import { setUser, clearUser } from "./redux/slices/authSlice";
 import { AnimatePresence } from "framer-motion";
 
+// ✅ Components & Pages
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import Dashboard from "./pages/Dashboard";
@@ -20,22 +21,21 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import PageTransition from "./components/PageTransition";
 import Profile from "./pages/Profile";
-import Analytics from "./pages/Analytics"
+import Analytics from "./pages/Analytics";
 import Planner from "./pages/Planner";
 import GoogleCalendarTest from "./pages/GoogleCalendarTest";
-import Documents from "./pages/Documents"
-import { Toaster, toast } from "react-hot-toast";
+import Documents from "./pages/Documents";
+import { Toaster } from "react-hot-toast";
+import ArchiveView from "./pages/ArchiveView";
 
 
-
-
-/* ✅ Layout Wrapper — handles Navbar/Footer visibility */
+/* ✅ Layout Wrapper — Handles Navbar/Footer visibility */
 function LayoutWrapper({ children }) {
   const location = useLocation();
 
-  // Hide both Navbar and Footer on Login & Register
+  // Hide Navbar + Footer on Login & Register pages
   const noHeaderFooterRoutes = ["/", "/register"];
-  // Hide Footer only on Dashboard
+  // Hide only Footer on Dashboard
   const noFooterRoutes = ["/dashboard"];
 
   const hideHeaderFooter = noHeaderFooterRoutes.includes(location.pathname);
@@ -50,7 +50,7 @@ function LayoutWrapper({ children }) {
   );
 }
 
-/* ✅ Protected Route — restrict access for unauthenticated users */
+/* ✅ Protected Route — Restrict access for unauthenticated users */
 function ProtectedRoute({ children }) {
   const { user, loading } = useSelector((state) => state.auth);
 
@@ -74,7 +74,7 @@ function App() {
   const dispatch = useDispatch();
   const location = useLocation();
 
-  // Sync Firebase Auth with Redux
+  // 🔹 Sync Firebase Auth state with Redux
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -93,97 +93,116 @@ function App() {
   }, [dispatch]);
 
   return (
-
     <LayoutWrapper>
-       <>
- 
-      <Toaster position="top-right" />
-      {/* other routes/components */}
-    </>
+      <>
+        {/* 🔹 Toast notifications */}
+        <Toaster position="top-right" />
 
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
-          {/* Public Routes */}
-          
-          <Route
-            path="/"
-            element={
-              <PageTransition>
-                <Login />
-              </PageTransition>
-            }
-          />
-          <Route
-            path="/register"
-            element={
-              <PageTransition>
-                <Register />
-              </PageTransition>
-            }
-          />
-
-          {/* Protected Routes */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute>
+        <AnimatePresence mode="wait">
+          <Routes location={location} key={location.pathname}>
+            {/* =================== PUBLIC ROUTES =================== */}
+            <Route
+              path="/"
+              element={
                 <PageTransition>
-                  <Dashboard />
+                  <Login />
                 </PageTransition>
-              </ProtectedRoute>
-            }
-          />
-
-          <Route
-            path="/board/:id"
-            element={
-              <ProtectedRoute>
+              }
+            />
+            <Route
+              path="/register"
+              element={
                 <PageTransition>
-                  <BoardView />
+                  <Register />
                 </PageTransition>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-  path="/profile"
-  element={
-    <ProtectedRoute>
-      <Profile />
-    </ProtectedRoute>
-  }
-/>
-<Route
-  path="/analytics"
-  element={
-    <ProtectedRoute>
-      <Analytics />
-    </ProtectedRoute>
-  }
-/>
-<Route
-  path="/planner"
-  element={
-    <ProtectedRoute>
-      <Planner />
-    </ProtectedRoute>
-  }
-/>
-<Route path="/calendar-test" element={<GoogleCalendarTest />} />
+              }
+            />
 
-<Route
-  path="/documents"
+            {/* =================== PROTECTED ROUTES =================== */}
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <PageTransition>
+                    <Dashboard />
+                  </PageTransition>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ✅ Board view */}
+            <Route
+              path="/board/:id"
+              element={
+                <ProtectedRoute>
+                  <PageTransition>
+                    <BoardView />
+                  </PageTransition>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+  path="/archive/:id"
   element={
     <ProtectedRoute>
-      <Documents />
+      <PageTransition>
+        <ArchiveView />
+      </PageTransition>
     </ProtectedRoute>
   }
 />
 
+            {/* ✅ FIXED — Documents now use board ID from URL */}
+            <Route
+              path="/board/:id/documents"
+              element={
+                <ProtectedRoute>
+                  <PageTransition>
+                    <Documents />
+                  </PageTransition>
+                </ProtectedRoute>
+              }
+            />
 
-        </Routes>
-      </AnimatePresence>
+            {/* ✅ Profile */}
+            <Route
+              path="/profile"
+              element={
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ✅ Analytics */}
+            <Route
+              path="/analytics"
+              element={
+                <ProtectedRoute>
+                  <Analytics />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ✅ Planner */}
+            <Route
+              path="/planner"
+              element={
+                <ProtectedRoute>
+                  <Planner />
+                </ProtectedRoute>
+              }
+            />
+
+            {/* ✅ Google Calendar Test */}
+            <Route
+              path="/calendar-test"
+              element={<GoogleCalendarTest />}
+            />
+          </Routes>
+        </AnimatePresence>
+      </>
     </LayoutWrapper>
-    
   );
 }
 

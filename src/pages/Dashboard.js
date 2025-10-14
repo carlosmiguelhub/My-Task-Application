@@ -161,7 +161,7 @@ const Dashboard = () => {
     { name: "Home", icon: <Home size={20} />, action: () => setActivePage("home") },
     { name: "Boards", icon: <LayoutGrid size={20} />, action: () => setActivePage("boards") },
     { name: "Planner", icon: <Calendar size={20} />, path: "/planner" },
-    { name: "Documents", icon: <FileText size={20} />, path: "/documents" },
+
     { name: "Analytics", icon: <Activity size={20} />, path: "/analytics" },
   ];
 

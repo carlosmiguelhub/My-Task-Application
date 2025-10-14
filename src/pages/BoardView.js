@@ -13,6 +13,7 @@ import {
   AlertCircle,
   CheckCircle,
   Archive,
+  FileText, // ✅ Added icon for View Documents button
 } from "lucide-react";
 import { db } from "../firebase";
 import {
@@ -65,13 +66,11 @@ const BoardView = () => {
     if (!newTask.title.trim()) return;
 
     try {
-      // 1️⃣ Add new task to Firestore
       await addDoc(collection(db, "users", user.uid, "boards", id, "tasks"), {
         ...newTask,
         createdAt: serverTimestamp(),
       });
 
-      // 2️⃣ Create real-time notification for user
       await createNotification(
         user.uid,
         "Task Created",
@@ -79,7 +78,6 @@ const BoardView = () => {
         "success"
       );
 
-      // 3️⃣ Reset modal + fields
       setNewTask({
         title: "",
         priority: "Normal",
@@ -92,12 +90,9 @@ const BoardView = () => {
     }
   };
 
-  // ✅ Delete task (optional: you can add a notification here too)
   const handleDelete = async (taskId) => {
     try {
       await deleteDoc(doc(db, "users", user.uid, "boards", id, "tasks", taskId));
-
-      // 🔔 (Optional) Create a "Task Deleted" notification
       await createNotification(
         user.uid,
         "Task Deleted",
@@ -109,14 +104,12 @@ const BoardView = () => {
     }
   };
 
-  // ✅ Update status manually via buttons
   const handleStatusUpdate = async (taskId, newStatus) => {
     try {
       await updateDoc(doc(db, "users", user.uid, "boards", id, "tasks", taskId), {
         status: newStatus,
       });
 
-      // 🔔 Optional notification when updating status
       await createNotification(
         user.uid,
         "Task Updated",
@@ -128,7 +121,6 @@ const BoardView = () => {
     }
   };
 
-  // ✅ Archive completed task
   const handleArchive = async (taskId) => {
     try {
       const taskRef = doc(db, "users", user.uid, "boards", id, "tasks", taskId);
@@ -140,7 +132,6 @@ const BoardView = () => {
       await setDoc(archiveRef, { ...taskData, archivedAt: new Date() });
       await deleteDoc(taskRef);
 
-      // 🔔 Optional archive notification
       await createNotification(
         user.uid,
         "Task Archived",
@@ -152,10 +143,8 @@ const BoardView = () => {
     }
   };
 
-  // ✅ Filter by status
   const getTasksByStatus = (status) => tasks.filter((t) => t.status === status);
 
-  // ✅ Priority color mapping
   const priorityColor = {
     High: "bg-red-500/20 text-red-600 dark:text-red-400 border-red-400/30",
     Normal: "bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-400/30",
@@ -174,8 +163,9 @@ const BoardView = () => {
           <ArrowLeft size={18} /> Back to Dashboard
         </button>
 
-        {/* Right: View Archive + Add Task */}
+        {/* Right: View Archive + View Documents + Add Task */}
         <div className="flex gap-3 justify-end">
+          {/* ✅ View Archive Button */}
           <button
             onClick={() => navigate(`/archive/${id}`)}
             className="flex items-center gap-2 bg-slate-700 hover:bg-slate-800 dark:hover:bg-slate-600 px-4 py-2 rounded-lg text-sm font-medium text-white transition"
@@ -183,6 +173,15 @@ const BoardView = () => {
             <Archive size={18} /> View Archive
           </button>
 
+          {/* ✅ NEW: View Documents Button */}
+          <button
+            onClick={() => navigate(`/board/${id}/documents`)} // Navigate to this board’s document page
+            className="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 dark:hover:bg-purple-500 px-4 py-2 rounded-lg text-sm font-medium text-white transition"
+          >
+            <FileText size={18} /> View Documents
+          </button>
+
+          {/* ✅ Add Task Button */}
           <button
             onClick={() => setIsModalOpen(true)}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 dark:hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm font-medium text-white transition"
