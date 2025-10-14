@@ -3,6 +3,8 @@ import { useParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
+import { createNotification } from "../utils/notificationUtils";
+
 import {
   Plus,
   ArrowLeft,
@@ -58,14 +60,26 @@ const BoardView = () => {
     return () => unsubscribe();
   }, [user, id]);
 
-  // ✅ Add task
+  // ✅ Add task (with notification)
   const handleAddTask = async () => {
     if (!newTask.title.trim()) return;
+
     try {
+      // 1️⃣ Add new task to Firestore
       await addDoc(collection(db, "users", user.uid, "boards", id, "tasks"), {
         ...newTask,
         createdAt: serverTimestamp(),
       });
+
+      // 2️⃣ Create real-time notification for user
+      await createNotification(
+        user.uid,
+        "Task Created",
+        `You successfully added "${newTask.title}".`,
+        "success"
+      );
+
+      // 3️⃣ Reset modal + fields
       setNewTask({
         title: "",
         priority: "Normal",
@@ -78,10 +92,18 @@ const BoardView = () => {
     }
   };
 
-  // ✅ Delete task
+  // ✅ Delete task (optional: you can add a notification here too)
   const handleDelete = async (taskId) => {
     try {
       await deleteDoc(doc(db, "users", user.uid, "boards", id, "tasks", taskId));
+
+      // 🔔 (Optional) Create a "Task Deleted" notification
+      await createNotification(
+        user.uid,
+        "Task Deleted",
+        "You deleted a task successfully.",
+        "warning"
+      );
     } catch (err) {
       console.error("Error deleting task:", err);
     }
@@ -93,6 +115,14 @@ const BoardView = () => {
       await updateDoc(doc(db, "users", user.uid, "boards", id, "tasks", taskId), {
         status: newStatus,
       });
+
+      // 🔔 Optional notification when updating status
+      await createNotification(
+        user.uid,
+        "Task Updated",
+        `A task was moved to "${newStatus}".`,
+        "info"
+      );
     } catch (err) {
       console.error("Error updating status:", err);
     }
@@ -109,6 +139,14 @@ const BoardView = () => {
 
       await setDoc(archiveRef, { ...taskData, archivedAt: new Date() });
       await deleteDoc(taskRef);
+
+      // 🔔 Optional archive notification
+      await createNotification(
+        user.uid,
+        "Task Archived",
+        "You archived a completed task.",
+        "info"
+      );
     } catch (err) {
       console.error("Error archiving task:", err);
     }

@@ -24,6 +24,8 @@ import Analytics from "./pages/Analytics"
 import Planner from "./pages/Planner";
 import GoogleCalendarTest from "./pages/GoogleCalendarTest";
 import Documents from "./pages/Documents"
+import { Toaster, toast } from "react-hot-toast";
+
 
 
 
@@ -91,10 +93,18 @@ function App() {
   }, [dispatch]);
 
   return (
+
     <LayoutWrapper>
+       <>
+ 
+      <Toaster position="top-right" />
+      {/* other routes/components */}
+    </>
+
       <AnimatePresence mode="wait">
         <Routes location={location} key={location.pathname}>
           {/* Public Routes */}
+          
           <Route
             path="/"
             element={
@@ -168,9 +178,12 @@ function App() {
     </ProtectedRoute>
   }
 />
+
+
         </Routes>
       </AnimatePresence>
     </LayoutWrapper>
+    
   );
 }
 
