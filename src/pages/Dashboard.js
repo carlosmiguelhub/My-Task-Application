@@ -382,9 +382,10 @@ const Dashboard = () => {
 
             {/* ===== Quick Actions ===== */}
             <div className="flex flex-wrap gap-4">
-              <button className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition">
+              {/* <button className="flex items-center gap-2 px-5 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition">
                 <PlusCircle size={20} /> New Task
-              </button>
+                
+              </button> */}
               <button
                 onClick={() => setActivePage("boards")}
                 className="flex items-center gap-2 px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition"
