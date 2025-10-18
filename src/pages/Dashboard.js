@@ -348,37 +348,154 @@ const Dashboard = () => {
             </div>
 
             {/* ===== Recent Tasks ===== */}
-            <div className="bg-white shadow-md rounded-2xl p-6 mb-8">
-              <h2 className="text-lg font-semibold text-gray-700 mb-4">
-                Recent Tasks
-              </h2>
-              {recentTasks.length > 0 ? (
-                <ul className="divide-y divide-gray-200">
-                  {recentTasks.map((task) => (
-                    <li
-                      key={task.id}
-                      className="py-3 flex justify-between items-center"
-                    >
-                      <div>
-                        <p className="font-medium text-gray-800">
-                          {task.title}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          {task.status || "Pending"}
-                        </p>
-                      </div>
-                      <span className="text-xs text-gray-400">
-                        {task.dueDate
-                          ? new Date(task.dueDate).toLocaleDateString()
-                          : "No due date"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-gray-500 text-sm">No recent tasks yet.</p>
-              )}
-            </div>
+{/* ===== Upcoming Plans (Dynamic & Informative) ===== */}
+<div className="bg-white dark:bg-slate-900 shadow-md rounded-2xl p-6 mb-8 transition-colors">
+  <div className="flex items-center justify-between mb-6">
+    <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">
+      Upcoming Plans
+    </h2>
+    <button
+      onClick={() => navigate("/planner")}
+      className="text-sm px-4 py-2 rounded-md bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-slate-700 transition font-medium"
+    >
+      View Planner →
+    </button>
+  </div>
+
+  <ul className="relative border-l border-slate-200 dark:border-slate-700 pl-6 space-y-6">
+    {[
+      {
+        id: 1,
+        title: "Team Meeting",
+        date: "2025-10-21T10:00:00",
+        description: "Discuss sprint goals with the development team.",
+        tag: "Meeting",
+        location: "Zoom",
+        createdAt: "2025-10-16T09:00:00",
+      },
+      {
+        id: 2,
+        title: "UI Review Session",
+        date: "2025-10-22T14:30:00",
+        description: "Finalize dashboard UI changes before next release.",
+        tag: "Design",
+        location: "Office HQ",
+        createdAt: "2025-10-16T10:00:00",
+      },
+      {
+        id: 3,
+        title: "Client Presentation",
+        date: "2025-10-25T09:00:00",
+        description: "Showcase project progress to the marketing client.",
+        tag: "Client",
+        location: "Online Call",
+        createdAt: "2025-10-16T11:00:00",
+      },
+    ].map((plan, index) => {
+      const now = new Date();
+      const start = new Date(plan.date);
+      const created = new Date(plan.createdAt);
+
+      const diff = start - now;
+      const daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
+      const totalDays = 7;
+      const progress = Math.min(100, Math.max(0, ((7 - daysLeft) / 7) * 100));
+
+      let color = "bg-green-500";
+      if (daysLeft <= 1) color = "bg-red-500";
+      else if (daysLeft <= 3) color = "bg-yellow-500";
+
+      const countdownLabel =
+        diff <= 0
+          ? "Happening now"
+          : `${daysLeft} day${daysLeft > 1 ? "s" : ""} left`;
+
+      const createdLabel = created.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+
+      const formattedDate = start.toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      });
+      const formattedTime = start.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+
+      return (
+        <motion.li
+          key={plan.id}
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: index * 0.1 }}
+          className="group relative bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md border border-transparent hover:border-indigo-100 dark:hover:border-slate-700 transition-all duration-300 cursor-pointer"
+          title={`${plan.description}\n${formattedDate} at ${formattedTime} • ${plan.location}`}
+        >
+          {/* Timeline Dot */}
+          <span className="absolute -left-[11px] top-5 w-5 h-5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 ring-4 ring-white dark:ring-slate-900 group-hover:scale-110 transition-transform"></span>
+
+          {/* Top Row */}
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+            <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-base mb-1 sm:mb-0 flex items-center gap-2">
+              {plan.title}
+              {/* Tag */}
+              <span
+                className={`text-[11px] px-2 py-0.5 rounded-full font-medium ${
+                  plan.tag === "Meeting"
+                    ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300"
+                    : plan.tag === "Design"
+                    ? "bg-pink-100 text-pink-700 dark:bg-pink-900/40 dark:text-pink-300"
+                    : plan.tag === "Client"
+                    ? "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                    : "bg-gray-100 text-gray-700 dark:bg-slate-800 dark:text-gray-300"
+                }`}
+              >
+                {plan.tag}
+              </span>
+            </h3>
+            <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              {formattedDate} • {formattedTime}
+            </span>
+          </div>
+
+          {/* Location */}
+          <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+            📍 {plan.location}
+          </p>
+
+          {/* Description */}
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 leading-snug">
+            {plan.description}
+          </p>
+
+          {/* Countdown + Created date */}
+          <div className="mt-3 flex justify-between items-center">
+            <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+              {countdownLabel}
+            </p>
+            <p className="text-xs text-gray-400 dark:text-gray-500">
+              Created {createdLabel}
+            </p>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="mt-1 w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+            <div
+              className={`h-1.5 rounded-full transition-all duration-500 ${color}`}
+              style={{ width: `${progress}%` }}
+            ></div>
+          </div>
+        </motion.li>
+      );
+    })}
+  </ul>
+</div>
+    
+
 
             {/* ===== Quick Actions ===== */}
             <div className="flex flex-wrap gap-4">
@@ -387,10 +504,10 @@ const Dashboard = () => {
                 
               </button> */}
               <button
-                onClick={() => setActivePage("boards")}
+                onClick={() => navigate('/summary')}
                 className="flex items-center gap-2 px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition"
               >
-                <FolderKanban size={20} /> View Boards
+                <FolderKanban size={20} /> View Task Summary
               </button>
             </div>
           </>

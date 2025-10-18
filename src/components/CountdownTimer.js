@@ -1,3 +1,5 @@
+import React, { useState, useEffect } from "react";
+
 /* ==========================================================
    ✅ COUNTDOWN TIMER (now remembers duration after refresh)
    ========================================================== */
@@ -10,11 +12,10 @@ const CountdownTimer = ({ dueDate, createdAt, status }) => {
   useEffect(() => {
     if (!dueDate || !createdAt) return;
 
-    // ✅ Use Firestore's createdAt as the real start time (not page load)
     const startTime = new Date(createdAt);
     const endTime = new Date(dueDate);
 
-    // ✅ Handle case when task already completed
+    // ✅ Handle completed tasks
     if (status === "Done") {
       const completedBeforeDeadline = new Date() < endTime;
       setIsOverdue(!completedBeforeDeadline);
@@ -26,12 +27,10 @@ const CountdownTimer = ({ dueDate, createdAt, status }) => {
       return;
     }
 
-    // ⏱ Live countdown updates
     const interval = setInterval(() => {
       const now = new Date();
       const diff = endTime - now;
 
-      // ✅ Stop ticking if marked done
       if (status === "Done") {
         clearInterval(interval);
         const completedBeforeDeadline = now < endTime;
@@ -44,7 +43,6 @@ const CountdownTimer = ({ dueDate, createdAt, status }) => {
         return;
       }
 
-      // ⚠️ Overdue
       if (diff <= 0) {
         clearInterval(interval);
         setIsOverdue(true);
@@ -54,7 +52,6 @@ const CountdownTimer = ({ dueDate, createdAt, status }) => {
         return;
       }
 
-      // 🧮 Calculate time left
       const days = Math.floor(diff / (1000 * 60 * 60 * 24));
       const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
       const minutes = Math.floor((diff / (1000 * 60)) % 60);
@@ -63,7 +60,6 @@ const CountdownTimer = ({ dueDate, createdAt, status }) => {
         `${days > 0 ? `${days}d ` : ""}${hours}h ${minutes}m ${seconds}s`
       );
 
-      // 📊 Progress (based on real startTime)
       const totalDuration = endTime - startTime;
       const elapsed = totalDuration - diff;
       const percent = Math.min(
@@ -72,14 +68,13 @@ const CountdownTimer = ({ dueDate, createdAt, status }) => {
       );
       setProgress(percent);
 
-      // 🎨 Color based on urgency
       if (percent > 90) setBarColor("bg-red-500");
       else if (percent > 70) setBarColor("bg-yellow-500");
       else setBarColor("bg-green-500");
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [dueDate, createdAt, status]); // ✅ re-run if any change
+  }, [dueDate, createdAt, status]);
 
   return (
     <div className="mt-1">
@@ -99,3 +94,5 @@ const CountdownTimer = ({ dueDate, createdAt, status }) => {
     </div>
   );
 };
+
+export default CountdownTimer;

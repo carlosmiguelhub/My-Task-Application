@@ -3,6 +3,7 @@ import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
+import { getMessaging, onMessage } from "firebase/messaging";
 
 // ✅ Your Firebase config
 const firebaseConfig = {
@@ -16,10 +17,11 @@ const firebaseConfig = {
 
 // ✅ Initialize Firebase
 const app = initializeApp(firebaseConfig);
+const messaging = getMessaging(app);
 
 // ✅ Export instances
 export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
-
+export { messaging, onMessage };
 export default app;

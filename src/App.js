@@ -27,6 +27,7 @@ import GoogleCalendarTest from "./pages/GoogleCalendarTest";
 import Documents from "./pages/Documents";
 import { Toaster } from "react-hot-toast";
 import ArchiveView from "./pages/ArchiveView";
+import Summary from "./pages/Summary";
 
 
 /* ✅ Layout Wrapper — Handles Navbar/Footer visibility */
@@ -199,6 +200,8 @@ function App() {
               path="/calendar-test"
               element={<GoogleCalendarTest />}
             />
+              <Route path="/summary" element={<Summary />} />
+
           </Routes>
         </AnimatePresence>
       </>
