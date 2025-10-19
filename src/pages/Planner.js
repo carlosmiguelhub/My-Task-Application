@@ -1,45 +1,108 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Calendar as RBCalendar, momentLocalizer, Views } from "react-big-calendar";
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
-import moment from "moment";
+import moment from "moment-timezone"; // ✅ use timezone version
 import { format } from "date-fns";
-import MiniCalendar from "react-calendar";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
-import "react-calendar/dist/Calendar.css";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, CalendarDays, Trash2, Save } from "lucide-react";
+import { X, CalendarDays, Trash2, Save, StickyNote } from "lucide-react";
 
+// ✅ set timezone to your system automatically (important)
+moment.tz.setDefault(moment.tz.guess());
 const localizer = momentLocalizer(moment);
 const DnDCalendar = withDragAndDrop(RBCalendar);
 
-// 🎨 Priority color system (with 3 shades per level for same-day variety)
+// 🎨 Priority colors
 const PRIORITY_COLORS = {
-  high: ["#ef4444", "#f87171", "#dc2626"],    // red shades
-  medium: ["#f59e0b", "#fbbf24", "#d97706"],  // amber shades
-  low: ["#10b981", "#34d399", "#059669"],     // green shades
+  high: ["#ef4444", "#f87171", "#dc2626"],
+  medium: ["#f59e0b", "#fbbf24", "#d97706"],
+  low: ["#10b981", "#34d399", "#059669"],
 };
 
 export default function PlannerWeekly() {
-  // Calendar state
   const [events, setEvents] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState(window.innerWidth < 768 ? Views.DAY : Views.WEEK);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
 
-  // Modal state
+  // Modals & selection
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState(null); // {start, end}
+  const [isNoteOpen, setIsNoteOpen] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
+  const [hoveredEventId, setHoveredEventId] = useState(null);
+
   const [newEvent, setNewEvent] = useState({
     title: "",
     agenda: "",
     where: "",
     description: "",
     priority: "medium",
+    note: "",
   });
 
-  // 🧠 Responsive: switch to Day view on mobile, Week on larger screens
+  const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
+  console.log("Gemini key exists:", !!apiKey);
+
+  // 🧠 AI NOTE GENERATOR
+const generateNoteForEvent = async (event) => {
+  const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
+  if (!apiKey) {
+    alert("❌ Missing Gemini API key. Please check your .env file.");
+    return;
+  }
+
+  try {
+    // ✅ Safely parse or fallback
+    const startTime = event.start ? new Date(event.start) : null;
+    const endTime = event.end ? new Date(event.end) : null;
+
+    const formattedTime =
+      startTime && endTime
+        ? `${format(startTime, "EEE, MMM d, h:mm a")} - ${format(endTime, "h:mm a")}`
+        : "unspecified time";
+
+    const prompt = `
+Generate a concise professional note for this plan:
+
+Title: ${event.title || "Untitled"}
+Agenda: ${event.agenda || "N/A"}
+Where: ${event.where || "N/A"}
+Description: ${event.description || "N/A"}
+Time: ${formattedTime}
+
+Make it friendly, actionable, and around 2–3 sentences.
+`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+        }),
+      }
+    );
+
+    const data = await response.json();
+    console.log("Gemini raw response:", data); // ✅ Debug log
+
+    const aiText =
+      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+      "Could not generate a note.";
+
+    setNewEvent((prev) => ({ ...prev, note: aiText }));
+    alert("✨ AI Note generated successfully!");
+  } catch (err) {
+    console.error("AI note generation failed:", err);
+    alert("❌ AI note generation failed. Check console for details.");
+  }
+};
+
+
+  // Responsive view
   useEffect(() => {
     const onResize = () => {
       const mobile = window.innerWidth < 768;
@@ -50,7 +113,7 @@ export default function PlannerWeekly() {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // ✅ Overlap checker (excludeId for edits)
+  // Overlap checker
   const overlaps = (start, end, excludeId = null) =>
     events.some(
       (ev) =>
@@ -60,14 +123,13 @@ export default function PlannerWeekly() {
           (start <= ev.start && end >= ev.end))
     );
 
-  // 🎨 Choose an event color by priority + how many events already on that day (for shade variation)
   const getColorForDate = (date, priority) => {
     const sameDayEvents = events.filter((ev) => moment(ev.start).isSame(date, "day"));
     const shades = PRIORITY_COLORS[priority] || PRIORITY_COLORS.medium;
     return shades[sameDayEvents.length % shades.length];
   };
 
-  // ➕ Add new event
+  // Add new event
   const handleAddEvent = () => {
     if (!newEvent.title.trim() || !selectedSlot) return;
     const { start, end } = selectedSlot;
@@ -77,8 +139,8 @@ export default function PlannerWeekly() {
     const item = {
       id: Date.now(),
       ...newEvent,
-      start,
-      end,
+      start: new Date(start), // ✅ ensure local
+      end: new Date(end),
       color,
       allDay: false,
     };
@@ -86,7 +148,6 @@ export default function PlannerWeekly() {
     setIsModalOpen(false);
   };
 
-  // 🕳️ User selects a blank slot to create
   const handleSelectSlot = ({ start, end }) => {
     if (overlaps(start, end)) {
       alert("This time slot is already occupied!");
@@ -94,11 +155,17 @@ export default function PlannerWeekly() {
     }
     setSelectedSlot({ start, end });
     setEditingEvent(null);
-    setNewEvent({ title: "", agenda: "", where: "", description: "", priority: "medium" });
+    setNewEvent({
+      title: "",
+      agenda: "",
+      where: "",
+      description: "",
+      priority: "medium",
+      note: "",
+    });
     setIsModalOpen(true);
   };
 
-  // ✏️ Click event to edit
   const handleSelectEvent = (event) => {
     setEditingEvent(event);
     setSelectedSlot({ start: event.start, end: event.end });
@@ -108,11 +175,11 @@ export default function PlannerWeekly() {
       where: event.where,
       description: event.description,
       priority: event.priority || "medium",
+      note: event.note || "",
     });
     setIsModalOpen(true);
   };
 
-  // 💾 Save edits
   const handleSaveEdit = () => {
     const color = getColorForDate(selectedSlot.start, newEvent.priority);
     setEvents((prev) =>
@@ -126,14 +193,12 @@ export default function PlannerWeekly() {
     setIsModalOpen(false);
   };
 
-  // 🗑️ Delete
   const handleDeleteEvent = () => {
     setEvents((prev) => prev.filter((ev) => ev.id !== editingEvent.id));
     setEditingEvent(null);
     setIsModalOpen(false);
   };
 
-  // ⤴️ Drag / Resize handlers
   const handleEventMoveOrResize = ({ event, start, end }) => {
     if (overlaps(start, end, event.id)) return alert("Time range overlaps!");
     setEvents((prev) =>
@@ -143,166 +208,104 @@ export default function PlannerWeekly() {
     );
   };
 
-  // 🎨 Event styling (light/dark friendly)
   const eventPropGetter = (event) => ({
-    style: {
-      backgroundColor: event.color || "#6366f1",
-      borderRadius: "12px",
-      color: "#fff",
-      border: "none",
-      padding: "6px 8px",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.15)",
-      display: "flex",
-      alignItems: "center",
-    },
-  });
+  style: {
+    backgroundColor: event.color || "#6366f1",
+    borderRadius: "12px",
+    color: "#fff",
+    border: "none",
+    padding: "4px 6px",
+    boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+    display: "block", // ✅ instead of flex
+    lineHeight: "1.2",
+    overflow: "hidden", // ✅ contain text
+    textOverflow: "ellipsis",
+    whiteSpace: "normal", // ✅ allow wrapping
+    cursor: "pointer",
+  },
+});
 
-  // 🧱 Event content (Title + Agenda + Time)
-  const EventComponent = ({ event }) => (
-    <div className="leading-tight w-full">
-      <div className="font-semibold text-white truncate">{event.title}</div>
-      {event.agenda && <div className="text-xs/4 opacity-95 truncate">{event.agenda}</div>}
-      <div className="text-[11px] opacity-90">
-        {format(event.start, "h:mm a")} – {format(event.end, "h:mm a")}
-      </div>
+
+ const EventComponent = ({ event }) => (
+  <div
+    className="relative w-full h-full overflow-visible"
+    onMouseEnter={() => setHoveredEventId(event.id)}
+    onMouseLeave={() => setHoveredEventId(null)}
+  >
+    <div className="font-semibold text-white text-[13px] leading-snug mb-[2px] break-words">
+      {event.title}
     </div>
-  );
+    {event.agenda && (
+      <div className="text-[11px] text-white/90 leading-snug mb-[1px] break-words">
+        {event.agenda}
+      </div>
+    )}
+    <div className="text-[10px] text-white/80">
+      {format(event.start, "h:mm a")} – {format(event.end, "h:mm a")}
+    </div>
 
-  // 🗓️ Mini calendar click → jump week/day
-  const onMiniPick = (date) => {
-    setCurrentDate(date);
-    // Keep auto view behavior (mobile Day, desktop Week)
-    setCalendarView(window.innerWidth < 768 ? Views.DAY : Views.WEEK);
-  };
+    {/* 📝 Hover Note Button */}
+    {hoveredEventId === event.id && (
+      <motion.div
+        initial={{ opacity: 0, x: 8 }}
+        animate={{ opacity: 1, x: 0 }}
+        exit={{ opacity: 0, x: 8 }}
+        className="absolute right-1 top-1/2 -translate-y-1/2"
+      >
+        <div className="relative group">
+          <button
+            className="text-[10px] px-2 py-[2px] rounded-md bg-white/90 text-slate-800 shadow hover:bg-white"
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditingEvent(event);
+              setNewEvent({
+                title: event.title,
+                agenda: event.agenda,
+                where: event.where,
+                description: event.description,
+                priority: event.priority || "medium",
+                note: event.note || "",
+              });
+              setIsNoteOpen(true);
+            }}
+          >
+            📝 Note
+          </button>
 
-  // Responsive calendar height
-  const calHeight = isMobile ? "70vh" : "80vh";
+          {/* ✨ Tooltip preview on hover */}
+          {event.note && (
+            <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150">
+              <div className="bg-slate-800 text-white text-xs rounded-lg px-3 py-2 w-52 shadow-lg whitespace-normal break-words dark:bg-slate-700">
+                {event.note.length > 120
+                  ? event.note.substring(0, 120) + "..."
+                  : event.note}
+              </div>
+            </div>
+          )}
+        </div>
+      </motion.div>
+    )}
+  </div>
+);
+
+
+  const calHeight = isMobile ? "80vh" : "85vh";
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white to-slate-100 dark:from-slate-900 dark:to-slate-950 p-4 md:p-8">
-      {/* Extra theme polish + mini calendar modern styles */}
-      <style>{`
-        /* React-Calendar modern card look */
-        .mini-cal {
-          border: none;
-          background: transparent;
-          width: 100%;
-        }
-        .mini-cal .react-calendar__navigation {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-bottom: 0.5rem;
-        }
-        .mini-cal .react-calendar__navigation button {
-          background: transparent;
-          border-radius: 10px;
-          padding: 6px 10px;
-        }
-        .mini-cal .react-calendar__tile {
-          border-radius: 10px;
-          padding: 0.6rem 0.2rem;
-          transition: transform .08s ease, background .2s ease;
-        }
-        .mini-cal .react-calendar__tile:enabled:hover {
-          transform: scale(1.02);
-          background: rgba(99,102,241,.12);
-        }
-        .mini-cal .react-calendar__tile--active {
-          background: #6366f1 !important;
-          color: #fff !important;
-        }
-        .dark .mini-cal .react-calendar__tile:enabled:hover {
-          background: rgba(99,102,241,.2);
-        }
-        .dark .mini-cal .react-calendar__tile--active {
-          background: #818cf8 !important;
-        }
-
-        /* Big calendar tweaks for light/dark grid contrast */
-        .rbc-calendar {
-          --cell-border: rgba(148,163,184,.35);
-        }
-        .rbc-time-view, .rbc-month-view, .rbc-agenda-view {
-          background: white;
-        }
-        .dark .rbc-time-view, .dark .rbc-month-view, .dark .rbc-agenda-view {
-          background: #0f172a; /* slate-900 */
-        }
-        .rbc-time-header, .rbc-time-content, .rbc-timeslot-group, .rbc-day-slot .rbc-time-slot {
-          border-color: var(--cell-border);
-        }
-        .dark .rbc-time-content, .dark .rbc-timeslot-group, .dark .rbc-time-header {
-          border-color: rgba(148,163,184,.25);
-        }
-        .rbc-toolbar {
-          gap: .5rem;
-        }
-        .rbc-toolbar button {
-          background: #f1f5f9;
-          border: none;
-          border-radius: 10px;
-          padding: 6px 10px;
-        }
-        .rbc-toolbar button.rbc-active {
-          background: #6366f1;
-          color: white;
-        }
-        .dark .rbc-toolbar button {
-          background: #1f2937;
-          color: #e5e7eb;
-        }
-        .dark .rbc-toolbar button.rbc-active {
-          background: #818cf8;
-          color: black;
-        }
-      `}</style>
-
-      {/* Header */}
-      <div className="flex items-center justify-between gap-3 mb-4">
+      {/* HEADER */}
+      <div className="flex items-center justify-between gap-3 mb-6">
         <h1 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
           <CalendarDays size={22} className="text-indigo-500" />
           Weekly Planner
         </h1>
       </div>
 
-      {/* Top area: Mini calendar + Legend (responsive) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
-        {/* Mini month calendar (always visible) */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 shadow-sm">
-          <MiniCalendar
-            onChange={onMiniPick}
-            value={currentDate}
-            className="mini-cal"
-            next2Label={null}
-            prev2Label={null}
-          />
-        </div>
-
-        {/* Legend and date summary */}
-        <div className="lg:col-span-2 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-4 shadow-sm flex flex-col gap-4">
-          {/* Legend */}
-          <div className="flex flex-wrap items-center gap-5">
-            <LegendChip color={PRIORITY_COLORS.high[0]} label="High Priority" />
-            <LegendChip color={PRIORITY_COLORS.medium[0]} label="Medium Priority" />
-            <LegendChip color={PRIORITY_COLORS.low[0]} label="Low Priority" />
-          </div>
-
-          {/* Current date / view controls (optional summary) */}
-          <div className="flex flex-wrap items-center gap-3 text-sm text-slate-600 dark:text-slate-300">
-            <span className="font-medium">
-              Focus: {format(currentDate, "EEE, MMM d, yyyy")}
-            </span>
-            <span className="hidden md:inline">•</span>
-            <span>View: {calendarView === Views.DAY ? "Day" : "Week"}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Calendar */}
+      {/* CALENDAR */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-2 md:p-4">
         <DnDCalendar
           localizer={localizer}
+          culture={navigator.language || "en-US"}
           date={currentDate}
           onNavigate={(date) => setCurrentDate(date)}
           events={events}
@@ -312,8 +315,8 @@ export default function PlannerWeekly() {
           views={[Views.WEEK, Views.DAY]}
           step={30}
           timeslots={1}
-          min={new Date(0, 0, 0, 8, 0)}
-          max={new Date(0, 0, 0, 20, 0)}
+          min={new Date(0, 0, 0, 7, 0)}   // ✅ start 7 AM
+          max={new Date(0, 0, 0, 23, 0)}  // ✅ end 11 PM
           selectable
           resizable
           onSelectSlot={handleSelectSlot}
@@ -326,15 +329,11 @@ export default function PlannerWeekly() {
         />
       </div>
 
-      {/* Modal: Add / Edit */}
+      {/* ADD/EDIT MODAL */}
       <AnimatePresence>
         {isModalOpen && (
-          <motion.div
-            className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
+          <motion.div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
             <motion.div
               initial={{ scale: 0.96, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -346,6 +345,15 @@ export default function PlannerWeekly() {
                 <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100">
                   {editingEvent ? "Edit Plan" : "Add Plan"}
                 </h2>
+                {editingEvent && (
+                  <button
+                    onClick={() => setIsNoteOpen(true)}
+                    className="p-2 rounded-full hover:bg-indigo-100 dark:hover:bg-slate-700 transition"
+                    title="Open Note"
+                  >
+                    <StickyNote className="text-indigo-600 dark:text-indigo-400" size={18} />
+                  </button>
+                )}
                 <button
                   onClick={() => setIsModalOpen(false)}
                   className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition"
@@ -361,7 +369,6 @@ export default function PlannerWeekly() {
                 onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
                 className="w-full mb-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none"
               />
-
               <input
                 type="text"
                 placeholder="Agenda"
@@ -369,7 +376,6 @@ export default function PlannerWeekly() {
                 onChange={(e) => setNewEvent({ ...newEvent, agenda: e.target.value })}
                 className="w-full mb-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none"
               />
-
               <input
                 type="text"
                 placeholder="Where"
@@ -377,7 +383,6 @@ export default function PlannerWeekly() {
                 onChange={(e) => setNewEvent({ ...newEvent, where: e.target.value })}
                 className="w-full mb-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none"
               />
-
               <select
                 value={newEvent.priority}
                 onChange={(e) => setNewEvent({ ...newEvent, priority: e.target.value })}
@@ -387,14 +392,12 @@ export default function PlannerWeekly() {
                 <option value="medium">🟡 Medium Priority</option>
                 <option value="high">🔴 High Priority</option>
               </select>
-
               <textarea
                 placeholder="Description"
                 value={newEvent.description}
                 onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
                 className="w-full h-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none resize-none mb-4"
               />
-
               <div className="text-sm text-slate-600 dark:text-slate-300 mb-3">
                 <p>
                   <strong>From:</strong>{" "}
@@ -432,16 +435,59 @@ export default function PlannerWeekly() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
-  );
-}
 
-/** Small legend chip component */
-function LegendChip({ color, label }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="inline-block w-3.5 h-3.5 rounded" style={{ backgroundColor: color }} />
-      <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
+      {/* NOTE MODAL */}
+      <AnimatePresence>
+        {isNoteOpen && (
+          <motion.div
+            className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] backdrop-blur-sm"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
+            <motion.div
+              initial={{ y: 40, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: 40, opacity: 0 }}
+              className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-[90%] max-w-lg p-6 border border-slate-200 dark:border-slate-700"
+            >
+              <div className="flex justify-between items-center mb-3">
+                <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                  <StickyNote size={18} className="text-indigo-500" /> Plan Note
+                </h2>
+                <button
+                  onClick={() => setIsNoteOpen(false)}
+                  className="p-2 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition"
+                >
+                  <X size={18} className="text-slate-500 dark:text-slate-300" />
+                </button>
+              </div>
+
+              <textarea
+                value={newEvent.note}
+                onChange={(e) => setNewEvent({ ...newEvent, note: e.target.value })}
+                placeholder="Write or generate your note..."
+                className="w-full h-40 border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-400 outline-none resize-none"
+              />
+
+              <div className="flex justify-end gap-2 mt-4">
+                <button
+                  onClick={() => setIsNoteOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 transition"
+                >
+                  Close
+                </button>
+                <button
+                  onClick={() => generateNoteForEvent(newEvent)}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition"
+                >
+                  Generate AI Note
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

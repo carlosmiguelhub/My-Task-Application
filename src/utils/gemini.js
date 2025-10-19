@@ -1,16 +1,19 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+export async function generateGeminiNote(prompt) {
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Missing Gemini API key");
 
-// read the key from .env
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+      }),
+    }
+  );
 
-// simple helper you can reuse anywhere
-export async function askGemini(prompt) {
-  try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-    const result = await model.generateContent(prompt);
-    return result.response.text();
-  } catch (err) {
-    console.error("Gemini error:", err);
-    return "⚠️ Something went wrong while contacting Gemini.";
-  }
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  return text;
 }

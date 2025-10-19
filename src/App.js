@@ -11,7 +11,6 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { setUser, clearUser } from "./redux/slices/authSlice";
 import { AnimatePresence } from "framer-motion";
-
 // ✅ Components & Pages
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
