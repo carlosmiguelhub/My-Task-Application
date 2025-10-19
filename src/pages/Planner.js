@@ -1,14 +1,31 @@
 import React, { useEffect, useState } from "react";
 import { Calendar as RBCalendar, momentLocalizer, Views } from "react-big-calendar";
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
-import moment from "moment-timezone"; // ✅ use timezone version
+import moment from "moment-timezone";
 import { format } from "date-fns";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, CalendarDays, Trash2, Save, StickyNote } from "lucide-react";
+import { useNavigate } from "react-router-dom"; // ✅ Add this near top with other imports
 
-// ✅ set timezone to your system automatically (important)
+
+// 🔥 Firebase
+import { db, auth } from "../firebase";
+import {
+  collection,
+  addDoc,
+  onSnapshot,
+  updateDoc,
+  doc,
+  deleteDoc,
+  query,
+  orderBy,
+  setDoc,
+} from "firebase/firestore";
+import { onAuthStateChanged } from "firebase/auth";
+
+// ✅ Set timezone automatically
 moment.tz.setDefault(moment.tz.guess());
 const localizer = momentLocalizer(moment);
 const DnDCalendar = withDragAndDrop(RBCalendar);
@@ -21,10 +38,14 @@ const PRIORITY_COLORS = {
 };
 
 export default function PlannerWeekly() {
+  const [user, setUser] = useState(null);
+  const [authReady, setAuthReady] = useState(false);
+
   const [events, setEvents] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
   const [calendarView, setCalendarView] = useState(window.innerWidth < 768 ? Views.DAY : Views.WEEK);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const navigate = useNavigate(); // ✅ add this
 
   // Modals & selection
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -43,66 +64,80 @@ export default function PlannerWeekly() {
   });
 
   const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
-  console.log("Gemini key exists:", !!apiKey);
+
+  // 👤 Track logged-in user + ensure /users/{uid} exists
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      try {
+        if (u) {
+          // ✅ Ensure the parent user doc exists (required by your rules)
+          await setDoc(doc(db, "users", u.uid), { email: u.email ?? null }, { merge: true });
+          console.log("[AUTH] Logged in as:", u.uid);
+          setUser(u);
+        } else {
+          console.log("[AUTH] No user");
+          setUser(null);
+        }
+      } catch (e) {
+        console.error("[AUTH] setDoc error:", e);
+        alert("Auth init failed: " + (e?.message || e));
+      } finally {
+        setAuthReady(true);
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // 🧠 AI NOTE GENERATOR
-const generateNoteForEvent = async (event) => {
-  const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
-  if (!apiKey) {
-    alert("❌ Missing Gemini API key. Please check your .env file.");
-    return;
-  }
+  const generateNoteForEvent = async (event) => {
+    if (!apiKey) {
+      alert("❌ Missing Gemini API key in .env");
+      return;
+    }
+    try {
+      const startTime = event.start ? new Date(event.start) : null;
+      const endTime = event.end ? new Date(event.end) : null;
+      const formattedTime =
+        startTime && endTime
+          ? `${format(startTime, "EEE, MMM d, h:mm a")} - ${format(endTime, "h:mm a")}`
+          : "unspecified time";
 
-  try {
-    // ✅ Safely parse or fallback
-    const startTime = event.start ? new Date(event.start) : null;
-    const endTime = event.end ? new Date(event.end) : null;
-
-    const formattedTime =
-      startTime && endTime
-        ? `${format(startTime, "EEE, MMM d, h:mm a")} - ${format(endTime, "h:mm a")}`
-        : "unspecified time";
-
-    const prompt = `
+      const prompt = `
 Generate a concise professional note for this plan:
-
 Title: ${event.title || "Untitled"}
 Agenda: ${event.agenda || "N/A"}
 Where: ${event.where || "N/A"}
 Description: ${event.description || "N/A"}
 Time: ${formattedTime}
+Make it friendly, actionable, and around 2–3 sentences.`;
 
-Make it friendly, actionable, and around 2–3 sentences.
-`;
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        }
+      );
+      const data = await response.json();
+      const aiText =
+        data?.candidates?.[0]?.content?.parts?.[0]?.text ||
+        "Could not generate a note.";
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
+      setNewEvent((prev) => ({ ...prev, note: aiText }));
+      alert("✨ AI Note generated successfully!");
+
+      if (editingEvent?.id && user) {
+        const docRef = doc(db, "users", user.uid, "plannerEvents", editingEvent.id);
+        await updateDoc(docRef, { note: aiText });
       }
-    );
+    } catch (err) {
+      console.error("AI note generation failed:", err);
+      alert("❌ AI note generation failed. " + (err?.message || ""));
+    }
+  };
 
-    const data = await response.json();
-    console.log("Gemini raw response:", data); // ✅ Debug log
-
-    const aiText =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ||
-      "Could not generate a note.";
-
-    setNewEvent((prev) => ({ ...prev, note: aiText }));
-    alert("✨ AI Note generated successfully!");
-  } catch (err) {
-    console.error("AI note generation failed:", err);
-    alert("❌ AI note generation failed. Check console for details.");
-  }
-};
-
-
-  // Responsive view
+  // 📱 Responsive view
   useEffect(() => {
     const onResize = () => {
       const mobile = window.innerWidth < 768;
@@ -113,7 +148,38 @@ Make it friendly, actionable, and around 2–3 sentences.
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Overlap checker
+  // 🔄 Firestore realtime sync — per user
+  useEffect(() => {
+    if (!user) return;
+    try {
+      const q = query(collection(db, "users", user.uid, "plannerEvents"), orderBy("start"));
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const data = snapshot.docs.map((d) => {
+            const raw = d.data();
+            return {
+              id: d.id,
+              ...raw,
+              start: raw.start?.toDate ? raw.start.toDate() : new Date(raw.start),
+              end: raw.end?.toDate ? raw.end.toDate() : new Date(raw.end),
+            };
+          });
+          setEvents(data);
+        },
+        (err) => {
+          console.error("[onSnapshot] error:", err);
+          alert("Realtime load failed: " + (err?.message || ""));
+        }
+      );
+      return () => unsubscribe();
+    } catch (e) {
+      console.error("[useEffect load] error:", e);
+      alert("Load failed: " + (e?.message || ""));
+    }
+  }, [user]);
+
+  // 🧩 Helpers
   const overlaps = (start, end, excludeId = null) =>
     events.some(
       (ev) =>
@@ -129,26 +195,39 @@ Make it friendly, actionable, and around 2–3 sentences.
     return shades[sameDayEvents.length % shades.length];
   };
 
-  // Add new event
-  const handleAddEvent = () => {
-    if (!newEvent.title.trim() || !selectedSlot) return;
-    const { start, end } = selectedSlot;
-    if (overlaps(start, end)) return alert("Time range unavailable!");
+  // ✅ ADD NEW EVENT (private) — with hard errors surfaced
+  const handleAddEvent = async () => {
+    try {
+      if (!user) throw new Error("You must be logged in.");
+      if (!newEvent.title.trim() || !selectedSlot) throw new Error("Title and time are required.");
 
-    const color = getColorForDate(start, newEvent.priority);
-    const item = {
-      id: Date.now(),
-      ...newEvent,
-      start: new Date(start), // ✅ ensure local
-      end: new Date(end),
-      color,
-      allDay: false,
-    };
-    setEvents((prev) => [...prev, item]);
-    setIsModalOpen(false);
+      const { start, end } = selectedSlot;
+      if (overlaps(start, end)) throw new Error("Time range unavailable!");
+
+      const color = getColorForDate(start, newEvent.priority);
+      const item = {
+        ...newEvent,
+        start: new Date(start),
+        end: new Date(end),
+        color,
+        allDay: false,
+        createdAt: new Date(),
+      };
+
+      const path = `users/${user.uid}/plannerEvents`;
+      console.log("[ADD] Writing to:", path, item);
+      await addDoc(collection(db, "users", user.uid, "plannerEvents"), item);
+
+      setIsModalOpen(false);
+    } catch (err) {
+      console.error("[ADD] failed:", err);
+      alert("Add failed: " + (err?.message || ""));
+    }
   };
 
+  // ✅ SELECT EMPTY SLOT — add debug so we know if this fires
   const handleSelectSlot = ({ start, end }) => {
+    console.log("[SELECT SLOT] start/end:", start, end);
     if (overlaps(start, end)) {
       alert("This time slot is already occupied!");
       return;
@@ -166,7 +245,9 @@ Make it friendly, actionable, and around 2–3 sentences.
     setIsModalOpen(true);
   };
 
+  // ✅ SELECT EXISTING EVENT
   const handleSelectEvent = (event) => {
+    console.log("[SELECT EVENT]", event?.id);
     setEditingEvent(event);
     setSelectedSlot({ start: event.start, end: event.end });
     setNewEvent({
@@ -180,126 +261,152 @@ Make it friendly, actionable, and around 2–3 sentences.
     setIsModalOpen(true);
   };
 
-  const handleSaveEdit = () => {
-    const color = getColorForDate(selectedSlot.start, newEvent.priority);
-    setEvents((prev) =>
-      prev.map((ev) =>
-        ev.id === editingEvent.id
-          ? { ...ev, ...newEvent, color, start: selectedSlot.start, end: selectedSlot.end }
-          : ev
-      )
-    );
-    setEditingEvent(null);
-    setIsModalOpen(false);
+  // ✅ SAVE EDIT
+  const handleSaveEdit = async () => {
+    try {
+      if (!editingEvent || !user) throw new Error("No event / not logged in.");
+      const color = getColorForDate(selectedSlot.start, newEvent.priority);
+      const docRef = doc(db, "users", user.uid, "plannerEvents", editingEvent.id);
+
+      console.log("[UPDATE] doc:", docRef.path);
+      await updateDoc(docRef, {
+        ...newEvent,
+        start: selectedSlot.start,
+        end: selectedSlot.end,
+        color,
+      });
+      setIsModalOpen(false);
+      setEditingEvent(null);
+    } catch (err) {
+      console.error("[UPDATE] failed:", err);
+      alert("Update failed: " + (err?.message || ""));
+    }
   };
 
-  const handleDeleteEvent = () => {
-    setEvents((prev) => prev.filter((ev) => ev.id !== editingEvent.id));
-    setEditingEvent(null);
-    setIsModalOpen(false);
+  // ✅ DELETE
+  const handleDeleteEvent = async () => {
+    try {
+      if (!editingEvent || !user) throw new Error("No event / not logged in.");
+      const ref = doc(db, "users", user.uid, "plannerEvents", editingEvent.id);
+      console.log("[DELETE] doc:", ref.path);
+      await deleteDoc(ref);
+      setIsModalOpen(false);
+      setEditingEvent(null);
+    } catch (err) {
+      console.error("[DELETE] failed:", err);
+      alert("Delete failed: " + (err?.message || ""));
+    }
   };
 
-  const handleEventMoveOrResize = ({ event, start, end }) => {
-    if (overlaps(start, end, event.id)) return alert("Time range overlaps!");
-    setEvents((prev) =>
-      prev.map((ev) =>
-        ev.id === event.id ? { ...ev, start: new Date(start), end: new Date(end) } : ev
-      )
-    );
+  // ✅ DRAG & RESIZE
+  const handleEventMoveOrResize = async ({ event, start, end }) => {
+    try {
+      if (!user) throw new Error("Not logged in.");
+      if (overlaps(start, end, event.id)) throw new Error("Time range overlaps!");
+      const ref = doc(db, "users", user.uid, "plannerEvents", event.id);
+      console.log("[MOVE/RESIZE] doc:", ref.path, "->", start, end);
+      await updateDoc(ref, { start: new Date(start), end: new Date(end) });
+    } catch (err) {
+      console.error("[MOVE/RESIZE] failed:", err);
+      alert("Move/resize failed: " + (err?.message || ""));
+    }
   };
 
+  // 🎨 STYLING
   const eventPropGetter = (event) => ({
-  style: {
-    backgroundColor: event.color || "#6366f1",
-    borderRadius: "12px",
-    color: "#fff",
-    border: "none",
-    padding: "4px 6px",
-    boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-    display: "block", // ✅ instead of flex
-    lineHeight: "1.2",
-    overflow: "hidden", // ✅ contain text
-    textOverflow: "ellipsis",
-    whiteSpace: "normal", // ✅ allow wrapping
-    cursor: "pointer",
-  },
-});
+    style: {
+      backgroundColor: event.color || "#6366f1",
+      borderRadius: "12px",
+      color: "#fff",
+      border: "none",
+      padding: "4px 6px",
+      lineHeight: "1.2",
+      whiteSpace: "normal",
+      overflow: "hidden",
+      cursor: "pointer",
+    },
+  });
 
-
- const EventComponent = ({ event }) => (
-  <div
-    className="relative w-full h-full overflow-visible"
-    onMouseEnter={() => setHoveredEventId(event.id)}
-    onMouseLeave={() => setHoveredEventId(null)}
-  >
-    <div className="font-semibold text-white text-[13px] leading-snug mb-[2px] break-words">
-      {event.title}
-    </div>
-    {event.agenda && (
-      <div className="text-[11px] text-white/90 leading-snug mb-[1px] break-words">
-        {event.agenda}
+  const EventComponent = ({ event }) => (
+    <div
+      className="relative w-full h-full overflow-visible"
+      onMouseEnter={() => setHoveredEventId(event.id)}
+      onMouseLeave={() => setHoveredEventId(null)}
+    >
+      <div className="font-semibold text-white text-[13px] leading-snug mb-[2px] break-words">
+        {event.title}
       </div>
-    )}
-    <div className="text-[10px] text-white/80">
-      {format(event.start, "h:mm a")} – {format(event.end, "h:mm a")}
-    </div>
+      {event.agenda && (
+        <div className="text-[11px] text-white/90 leading-snug mb-[1px] break-words">
+          {event.agenda}
+        </div>
+      )}
+      <div className="text-[10px] text-white/80">
+        {format(event.start, "h:mm a")} – {format(event.end, "h:mm a")}
+      </div>
 
-    {/* 📝 Hover Note Button */}
-    {hoveredEventId === event.id && (
-      <motion.div
-        initial={{ opacity: 0, x: 8 }}
-        animate={{ opacity: 1, x: 0 }}
-        exit={{ opacity: 0, x: 8 }}
-        className="absolute right-1 top-1/2 -translate-y-1/2"
-      >
-        <div className="relative group">
+      {hoveredEventId === event.id && (
+        <motion.div
+          initial={{ opacity: 0, x: 8 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 8 }}
+          className="absolute right-1 top-1/2 -translate-y-1/2"
+        >
           <button
             className="text-[10px] px-2 py-[2px] rounded-md bg-white/90 text-slate-800 shadow hover:bg-white"
             onClick={(e) => {
               e.stopPropagation();
               setEditingEvent(event);
-              setNewEvent({
-                title: event.title,
-                agenda: event.agenda,
-                where: event.where,
-                description: event.description,
-                priority: event.priority || "medium",
-                note: event.note || "",
-              });
+              setNewEvent(event);
               setIsNoteOpen(true);
             }}
           >
             📝 Note
           </button>
-
-          {/* ✨ Tooltip preview on hover */}
-          {event.note && (
-            <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity duration-150">
-              <div className="bg-slate-800 text-white text-xs rounded-lg px-3 py-2 w-52 shadow-lg whitespace-normal break-words dark:bg-slate-700">
-                {event.note.length > 120
-                  ? event.note.substring(0, 120) + "..."
-                  : event.note}
-              </div>
-            </div>
-          )}
-        </div>
-      </motion.div>
-    )}
-  </div>
-);
-
+        </motion.div>
+      )}
+    </div>
+  );
 
   const calHeight = isMobile ? "80vh" : "85vh";
 
+  // 🚧 Don’t render calendar until auth is resolved
+  if (!authReady) {
+    return (
+      <div className="p-10 text-center text-slate-500 dark:text-slate-300">
+        Loading your planner...
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="p-10 text-center text-slate-700 dark:text-slate-200">
+        Please sign in to use your planner.
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-white to-slate-100 dark:from-slate-900 dark:to-slate-950 p-4 md:p-8">
-      {/* HEADER */}
-      <div className="flex items-center justify-between gap-3 mb-6">
-        <h1 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-          <CalendarDays size={22} className="text-indigo-500" />
-          Weekly Planner
-        </h1>
-      </div>
+   
+     {/* HEADER */}
+<div className="flex items-center justify-between gap-3 mb-6">
+  <div className="flex items-center gap-2">
+    <CalendarDays size={22} className="text-indigo-500" />
+    <h1 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100">
+      Weekly Planner
+    </h1>
+  </div>
+
+  <button
+    onClick={() => navigate("/dashboard")}
+    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white font-medium transition shadow-sm"
+  >
+    ← Go Back to Dashboard
+  </button>
+</div>
+
 
       {/* CALENDAR */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-2 md:p-4">
@@ -315,9 +422,10 @@ Make it friendly, actionable, and around 2–3 sentences.
           views={[Views.WEEK, Views.DAY]}
           step={30}
           timeslots={1}
-          min={new Date(0, 0, 0, 7, 0)}   // ✅ start 7 AM
-          max={new Date(0, 0, 0, 23, 0)}  // ✅ end 11 PM
-          selectable
+          min={new Date(0, 0, 0, 7, 0)}
+          max={new Date(0, 0, 0, 23, 0)}
+          selectable="ignoreEvents"   // 👈 makes empty-slot selection reliable
+          longPressThreshold={10}     // 👈 better touch behavior
           resizable
           onSelectSlot={handleSelectSlot}
           onSelectEvent={handleSelectEvent}
@@ -329,11 +437,13 @@ Make it friendly, actionable, and around 2–3 sentences.
         />
       </div>
 
-      {/* ADD/EDIT MODAL */}
+      {/* ADD / EDIT MODAL */}
       <AnimatePresence>
         {isModalOpen && (
-          <motion.div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div
+            className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm"
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+          >
             <motion.div
               initial={{ scale: 0.96, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
@@ -398,16 +508,6 @@ Make it friendly, actionable, and around 2–3 sentences.
                 onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
                 className="w-full h-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none resize-none mb-4"
               />
-              <div className="text-sm text-slate-600 dark:text-slate-300 mb-3">
-                <p>
-                  <strong>From:</strong>{" "}
-                  {selectedSlot && format(selectedSlot.start, "EEE, MMM d • h:mm a")}
-                </p>
-                <p>
-                  <strong>To:</strong>{" "}
-                  {selectedSlot && format(selectedSlot.end, "EEE, MMM d • h:mm a")}
-                </p>
-              </div>
 
               <div className="flex justify-end gap-3 mt-5">
                 {editingEvent && (
