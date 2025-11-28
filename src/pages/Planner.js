@@ -7,8 +7,7 @@ import "react-big-calendar/lib/css/react-big-calendar.css";
 import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, CalendarDays, Trash2, Save, StickyNote } from "lucide-react";
-import { useNavigate } from "react-router-dom"; // ✅ Add this near top with other imports
-
+import { useNavigate } from "react-router-dom";
 
 // 🔥 Firebase
 import { db, auth } from "../firebase";
@@ -43,9 +42,11 @@ export default function PlannerWeekly() {
 
   const [events, setEvents] = useState([]);
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [calendarView, setCalendarView] = useState(window.innerWidth < 768 ? Views.DAY : Views.WEEK);
+  const [calendarView, setCalendarView] = useState(
+    window.innerWidth < 768 ? Views.DAY : Views.WEEK
+  );
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const navigate = useNavigate(); // ✅ add this
+  const navigate = useNavigate();
 
   // Modals & selection
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -70,8 +71,11 @@ export default function PlannerWeekly() {
     const unsub = onAuthStateChanged(auth, async (u) => {
       try {
         if (u) {
-          // ✅ Ensure the parent user doc exists (required by your rules)
-          await setDoc(doc(db, "users", u.uid), { email: u.email ?? null }, { merge: true });
+          await setDoc(
+            doc(db, "users", u.uid),
+            { email: u.email ?? null },
+            { merge: true }
+          );
           console.log("[AUTH] Logged in as:", u.uid);
           setUser(u);
         } else {
@@ -99,7 +103,10 @@ export default function PlannerWeekly() {
       const endTime = event.end ? new Date(event.end) : null;
       const formattedTime =
         startTime && endTime
-          ? `${format(startTime, "EEE, MMM d, h:mm a")} - ${format(endTime, "h:mm a")}`
+          ? `${format(startTime, "EEE, MMM d, h:mm a")} - ${format(
+              endTime,
+              "h:mm a"
+            )}`
           : "unspecified time";
 
       const prompt = `
@@ -116,7 +123,9 @@ Make it friendly, actionable, and around 2–3 sentences.`;
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+          }),
         }
       );
       const data = await response.json();
@@ -128,7 +137,13 @@ Make it friendly, actionable, and around 2–3 sentences.`;
       alert("✨ AI Note generated successfully!");
 
       if (editingEvent?.id && user) {
-        const docRef = doc(db, "users", user.uid, "plannerEvents", editingEvent.id);
+        const docRef = doc(
+          db,
+          "users",
+          user.uid,
+          "plannerEvents",
+          editingEvent.id
+        );
         await updateDoc(docRef, { note: aiText });
       }
     } catch (err) {
@@ -152,7 +167,10 @@ Make it friendly, actionable, and around 2–3 sentences.`;
   useEffect(() => {
     if (!user) return;
     try {
-      const q = query(collection(db, "users", user.uid, "plannerEvents"), orderBy("start"));
+      const q = query(
+        collection(db, "users", user.uid, "plannerEvents"),
+        orderBy("start")
+      );
       const unsubscribe = onSnapshot(
         q,
         (snapshot) => {
@@ -161,7 +179,9 @@ Make it friendly, actionable, and around 2–3 sentences.`;
             return {
               id: d.id,
               ...raw,
-              start: raw.start?.toDate ? raw.start.toDate() : new Date(raw.start),
+              start: raw.start?.toDate
+                ? raw.start.toDate()
+                : new Date(raw.start),
               end: raw.end?.toDate ? raw.end.toDate() : new Date(raw.end),
             };
           });
@@ -190,16 +210,19 @@ Make it friendly, actionable, and around 2–3 sentences.`;
     );
 
   const getColorForDate = (date, priority) => {
-    const sameDayEvents = events.filter((ev) => moment(ev.start).isSame(date, "day"));
+    const sameDayEvents = events.filter((ev) =>
+      moment(ev.start).isSame(date, "day")
+    );
     const shades = PRIORITY_COLORS[priority] || PRIORITY_COLORS.medium;
     return shades[sameDayEvents.length % shades.length];
   };
 
-  // ✅ ADD NEW EVENT (private) — with hard errors surfaced
+  // ✅ ADD NEW EVENT
   const handleAddEvent = async () => {
     try {
       if (!user) throw new Error("You must be logged in.");
-      if (!newEvent.title.trim() || !selectedSlot) throw new Error("Title and time are required.");
+      if (!newEvent.title.trim() || !selectedSlot)
+        throw new Error("Title and time are required.");
 
       const { start, end } = selectedSlot;
       if (overlaps(start, end)) throw new Error("Time range unavailable!");
@@ -225,7 +248,7 @@ Make it friendly, actionable, and around 2–3 sentences.`;
     }
   };
 
-  // ✅ SELECT EMPTY SLOT — add debug so we know if this fires
+  // ✅ SELECT EMPTY SLOT
   const handleSelectSlot = ({ start, end }) => {
     console.log("[SELECT SLOT] start/end:", start, end);
     if (overlaps(start, end)) {
@@ -266,7 +289,13 @@ Make it friendly, actionable, and around 2–3 sentences.`;
     try {
       if (!editingEvent || !user) throw new Error("No event / not logged in.");
       const color = getColorForDate(selectedSlot.start, newEvent.priority);
-      const docRef = doc(db, "users", user.uid, "plannerEvents", editingEvent.id);
+      const docRef = doc(
+        db,
+        "users",
+        user.uid,
+        "plannerEvents",
+        editingEvent.id
+      );
 
       console.log("[UPDATE] doc:", docRef.path);
       await updateDoc(docRef, {
@@ -302,7 +331,8 @@ Make it friendly, actionable, and around 2–3 sentences.`;
   const handleEventMoveOrResize = async ({ event, start, end }) => {
     try {
       if (!user) throw new Error("Not logged in.");
-      if (overlaps(start, end, event.id)) throw new Error("Time range overlaps!");
+      if (overlaps(start, end, event.id))
+        throw new Error("Time range overlaps!");
       const ref = doc(db, "users", user.uid, "plannerEvents", event.id);
       console.log("[MOVE/RESIZE] doc:", ref.path, "->", start, end);
       await updateDoc(ref, { start: new Date(start), end: new Date(end) });
@@ -389,27 +419,80 @@ Make it friendly, actionable, and around 2–3 sentences.`;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white to-slate-100 dark:from-slate-900 dark:to-slate-950 p-4 md:p-8">
-   
-     {/* HEADER */}
-<div className="flex items-center justify-between gap-3 mb-6">
-  <div className="flex items-center gap-2">
-    <CalendarDays size={22} className="text-indigo-500" />
-    <h1 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100">
-      Weekly Planner
-    </h1>
-  </div>
+      {/* 🌙 Extra dark-mode styling for react-big-calendar */}
+      <style>{`
+        .dark .rbc-calendar {
+          background-color: #020617;
+          color: #e5e7eb;
+        }
+        .dark .rbc-toolbar {
+          background-color: #020617;
+          border-bottom: 1px solid #1f2937;
+        }
+        .dark .rbc-toolbar button {
+          background: transparent;
+          color: #e5e7eb;
+          border: 1px solid #4b5563;
+        }
+        .dark .rbc-toolbar button.rbc-active,
+        .dark .rbc-toolbar button:hover {
+          background-color: #4f46e5;
+          color: #f9fafb;
+          border-color: #4f46e5;
+        }
+        .dark .rbc-month-view,
+        .dark .rbc-time-view {
+          background-color: #020617;
+          border-color: #1f2937;
+        }
+        .dark .rbc-header {
+          background-color: #020617;
+          color: #e5e7eb;
+          border-color: #1f2937;
+        }
+        .dark .rbc-time-content,
+        .dark .rbc-time-header-content,
+        .dark .rbc-time-slot,
+        .dark .rbc-day-bg {
+          border-color: #1f2937;
+        }
+        .dark .rbc-time-gutter,
+        .dark .rbc-timeslot-group {
+          border-color: #1f2937;
+        }
+        .dark .rbc-label {
+          color: #9ca3af;
+        }
+        .dark .rbc-today {
+          background-color: rgba(79, 70, 229, 0.12);
+        }
+        .dark .rbc-off-range-bg {
+          background-color: #020617;
+        }
+        .dark .rbc-off-range {
+          color: #4b5563;
+        }
+      `}</style>
 
-  <button
-    onClick={() => navigate("/dashboard")}
-    className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white font-medium transition shadow-sm"
-  >
-    ← Go Back to Dashboard
-  </button>
-</div>
+      {/* HEADER */}
+      <div className="flex items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-2">
+          <CalendarDays size={22} className="text-indigo-500" />
+          <h1 className="text-xl md:text-2xl font-bold text-slate-800 dark:text-slate-100">
+            Weekly Planner
+          </h1>
+        </div>
 
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white font-medium transition shadow-sm"
+        >
+          ← Go Back to Dashboard
+        </button>
+      </div>
 
       {/* CALENDAR */}
-      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-lg p-2 md:p-4">
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-lg p-2 md:p-4">
         <DnDCalendar
           localizer={localizer}
           culture={navigator.language || "en-US"}
@@ -424,8 +507,8 @@ Make it friendly, actionable, and around 2–3 sentences.`;
           timeslots={1}
           min={new Date(0, 0, 0, 7, 0)}
           max={new Date(0, 0, 0, 23, 0)}
-          selectable="ignoreEvents"   // 👈 makes empty-slot selection reliable
-          longPressThreshold={10}     // 👈 better touch behavior
+          selectable="ignoreEvents"
+          longPressThreshold={10}
           resizable
           onSelectSlot={handleSelectSlot}
           onSelectEvent={handleSelectEvent}
@@ -442,7 +525,9 @@ Make it friendly, actionable, and around 2–3 sentences.`;
         {isModalOpen && (
           <motion.div
             className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 backdrop-blur-sm"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
           >
             <motion.div
               initial={{ scale: 0.96, opacity: 0 }}
@@ -461,7 +546,10 @@ Make it friendly, actionable, and around 2–3 sentences.`;
                     className="p-2 rounded-full hover:bg-indigo-100 dark:hover:bg-slate-700 transition"
                     title="Open Note"
                   >
-                    <StickyNote className="text-indigo-600 dark:text-indigo-400" size={18} />
+                    <StickyNote
+                      className="text-indigo-600 dark:text-indigo-400"
+                      size={18}
+                    />
                   </button>
                 )}
                 <button
@@ -476,26 +564,34 @@ Make it friendly, actionable, and around 2–3 sentences.`;
                 type="text"
                 placeholder="Title"
                 value={newEvent.title}
-                onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                onChange={(e) =>
+                  setNewEvent({ ...newEvent, title: e.target.value })
+                }
                 className="w-full mb-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none"
               />
               <input
                 type="text"
                 placeholder="Agenda"
                 value={newEvent.agenda}
-                onChange={(e) => setNewEvent({ ...newEvent, agenda: e.target.value })}
+                onChange={(e) =>
+                  setNewEvent({ ...newEvent, agenda: e.target.value })
+                }
                 className="w-full mb-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none"
               />
               <input
                 type="text"
                 placeholder="Where"
                 value={newEvent.where}
-                onChange={(e) => setNewEvent({ ...newEvent, where: e.target.value })}
+                onChange={(e) =>
+                  setNewEvent({ ...newEvent, where: e.target.value })
+                }
                 className="w-full mb-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none"
               />
               <select
                 value={newEvent.priority}
-                onChange={(e) => setNewEvent({ ...newEvent, priority: e.target.value })}
+                onChange={(e) =>
+                  setNewEvent({ ...newEvent, priority: e.target.value })
+                }
                 className="w-full mb-3 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none"
               >
                 <option value="low">🟢 Low Priority</option>
@@ -505,7 +601,9 @@ Make it friendly, actionable, and around 2–3 sentences.`;
               <textarea
                 placeholder="Description"
                 value={newEvent.description}
-                onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                onChange={(e) =>
+                  setNewEvent({ ...newEvent, description: e.target.value })
+                }
                 className="w-full h-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none resize-none mb-4"
               />
 
@@ -526,7 +624,7 @@ Make it friendly, actionable, and around 2–3 sentences.`;
                 </button>
                 <button
                   onClick={editingEvent ? handleSaveEdit : handleAddEvent}
-                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:hover:bg-indigo-500 text-white transition"
+                  className="flex items-center gap-1 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white transition"
                 >
                   <Save size={16} /> {editingEvent ? "Save" : "Add"}
                 </button>
@@ -565,7 +663,9 @@ Make it friendly, actionable, and around 2–3 sentences.`;
 
               <textarea
                 value={newEvent.note}
-                onChange={(e) => setNewEvent({ ...newEvent, note: e.target.value })}
+                onChange={(e) =>
+                  setNewEvent({ ...newEvent, note: e.target.value })
+                }
                 placeholder="Write or generate your note..."
                 className="w-full h-40 border border-slate-300 dark:border-slate-600 rounded-xl px-3 py-2 text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-700 focus:ring-2 focus:ring-indigo-400 outline-none resize-none"
               />
@@ -579,7 +679,7 @@ Make it friendly, actionable, and around 2–3 sentences.`;
                 </button>
                 <button
                   onClick={() => generateNoteForEvent(newEvent)}
-                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white transition"
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 dark:bg-indigo-500 dark:hover:bg-indigo-400 text-white transition"
                 >
                   Generate AI Note
                 </button>

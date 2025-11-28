@@ -11,6 +11,7 @@ import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 import { setUser, clearUser } from "./redux/slices/authSlice";
 import { AnimatePresence } from "framer-motion";
+
 // ✅ Components & Pages
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
@@ -22,20 +23,17 @@ import PageTransition from "./components/PageTransition";
 import Profile from "./pages/Profile";
 import Analytics from "./pages/Analytics";
 import Planner from "./pages/Planner";
+import PlannerSummary from "./pages/PlannerSummary";   // ✅ Correct import
 import GoogleCalendarTest from "./pages/GoogleCalendarTest";
 import Documents from "./pages/Documents";
 import { Toaster } from "react-hot-toast";
 import ArchiveView from "./pages/ArchiveView";
-import Summary from "./pages/Summary";
-
 
 /* ✅ Layout Wrapper — Handles Navbar/Footer visibility */
 function LayoutWrapper({ children }) {
   const location = useLocation();
 
-  // Hide Navbar + Footer on Login & Register pages
   const noHeaderFooterRoutes = ["/", "/register"];
-  // Hide only Footer on Dashboard
   const noFooterRoutes = ["/dashboard"];
 
   const hideHeaderFooter = noHeaderFooterRoutes.includes(location.pathname);
@@ -74,7 +72,6 @@ function App() {
   const dispatch = useDispatch();
   const location = useLocation();
 
-  // 🔹 Sync Firebase Auth state with Redux
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
@@ -95,7 +92,6 @@ function App() {
   return (
     <LayoutWrapper>
       <>
-        {/* 🔹 Toast notifications */}
         <Toaster position="top-right" />
 
         <AnimatePresence mode="wait">
@@ -109,6 +105,7 @@ function App() {
                 </PageTransition>
               }
             />
+
             <Route
               path="/register"
               element={
@@ -122,15 +119,12 @@ function App() {
             <Route
               path="/dashboard"
               element={
-                <ProtectedRoute>
-                  <PageTransition>
-                    <Dashboard />
-                  </PageTransition>
-                </ProtectedRoute>
+                <PageTransition>
+                  <Dashboard />
+                </PageTransition>
               }
             />
 
-            {/* ✅ Board view */}
             <Route
               path="/board/:id"
               element={
@@ -141,18 +135,18 @@ function App() {
                 </ProtectedRoute>
               }
             />
-            <Route
-  path="/archive/:id"
-  element={
-    <ProtectedRoute>
-      <PageTransition>
-        <ArchiveView />
-      </PageTransition>
-    </ProtectedRoute>
-  }
-/>
 
-            {/* ✅ FIXED — Documents now use board ID from URL */}
+            <Route
+              path="/archive/:id"
+              element={
+                <ProtectedRoute>
+                  <PageTransition>
+                    <ArchiveView />
+                  </PageTransition>
+                </ProtectedRoute>
+              }
+            />
+
             <Route
               path="/board/:id/documents"
               element={
@@ -164,7 +158,6 @@ function App() {
               }
             />
 
-            {/* ✅ Profile */}
             <Route
               path="/profile"
               element={
@@ -174,7 +167,6 @@ function App() {
               }
             />
 
-            {/* ✅ Analytics */}
             <Route
               path="/analytics"
               element={
@@ -184,7 +176,7 @@ function App() {
               }
             />
 
-            {/* ✅ Planner */}
+            {/* =================== PLANNER ROUTES =================== */}
             <Route
               path="/planner"
               element={
@@ -194,13 +186,25 @@ function App() {
               }
             />
 
-            {/* ✅ Google Calendar Test */}
+            {/* ✅ NEW: Planner Summary page */}
             <Route
-              path="/calendar-test"
-              element={<GoogleCalendarTest />}
+              path="/planner-summary"
+              element={
+          
+                  <PageTransition>
+                    <PlannerSummary />
+                  </PageTransition>
+                
+              }
             />
-              <Route path="/summary" element={<Summary />} />
 
+            {/* Optional alias: /summary → /planner-summary */}
+            <Route
+              path="/summary"
+              element={<Navigate to="/planner-summary" replace />}
+            />
+
+            <Route path="/calendar-test" element={<GoogleCalendarTest />} />
           </Routes>
         </AnimatePresence>
       </>
@@ -208,7 +212,7 @@ function App() {
   );
 }
 
-/* ✅ Router Wrapper — ensures Router context for useLocation */
+/* Router Wrapper */
 export default function AppRouter() {
   return (
     <Router>

@@ -6,7 +6,6 @@ import {
   LayoutGrid,
   Calendar,
   Activity,
-  FileText,
   Menu,
   ChevronLeft,
   ChevronRight,
@@ -16,7 +15,6 @@ import {
   Clock,
   FolderKanban,
   TrendingUp,
-  PlusCircle,
 } from "lucide-react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -54,7 +52,7 @@ const Dashboard = () => {
     pending: 0,
   });
 
-  // ✅ NEW: upcoming planner events
+  // ✅ Upcoming planner events
   const [plans, setPlans] = useState([]);
 
   // Responsive sidebar
@@ -130,75 +128,65 @@ const Dashboard = () => {
     return () => unsubscribeList.forEach((u) => u());
   }, [user]);
 
-  // ✅ Load upcoming planner events (synced from Firestore)
+  // ✅ Load upcoming planner events
   useEffect(() => {
-  if (!user) return;
+    if (!user) return;
 
-  console.log("🔍 Listening to plannerEvents for UID:", user.uid);
+    const q = query(
+      collection(db, "users", user.uid, "plannerEvents"),
+      orderBy("start", "asc")
+    );
 
-  const q = query(
-    collection(db, "users", user.uid, "plannerEvents"),
-    orderBy("start", "asc")
-  );
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        if (snapshot.empty) {
+          setPlans([]);
+          return;
+        }
 
-  const unsubscribe = onSnapshot(
-    q,
-    (snapshot) => {
-      if (snapshot.empty) {
-        console.log("⚠️ No documents found in plannerEvents!");
-        setPlans([]);
-        return;
+        const data = snapshot.docs.map((doc) => {
+          const d = doc.data();
+          const start =
+            d.start?.toDate?.() ??
+            (typeof d.start === "string" ? new Date(d.start) : null);
+          const end =
+            d.end?.toDate?.() ??
+            (typeof d.end === "string" ? new Date(d.end) : null);
+
+          return {
+            id: doc.id,
+            title: d.title || "Untitled Plan",
+            description: d.description || "",
+            tag: d.agenda || "General",
+            location: d.where || "No location",
+            start,
+            end,
+            createdAt:
+              d.createdAt?.toDate?.() ??
+              (typeof d.createdAt === "string"
+                ? new Date(d.createdAt)
+                : new Date()),
+          };
+        });
+
+        const now = new Date();
+        const upcoming = data.filter(
+          (p) =>
+            p.start instanceof Date &&
+            !isNaN(p.start) &&
+            p.start.getTime() >= now.getTime() - 1000 * 60 * 60 * 24
+        );
+
+        setPlans(upcoming.slice(0, 5));
+      },
+      (err) => {
+        console.error("❌ Firestore listener error:", err);
       }
+    );
 
-      const data = snapshot.docs.map((doc) => {
-        const d = doc.data();
-        const start =
-          d.start?.toDate?.() ??
-          (typeof d.start === "string" ? new Date(d.start) : null);
-        const end =
-          d.end?.toDate?.() ??
-          (typeof d.end === "string" ? new Date(d.end) : null);
-
-        return {
-          id: doc.id,
-          title: d.title || "Untitled Plan",
-          description: d.description || "",
-          tag: d.agenda || "General",
-          location: d.where || "No location",
-          start,
-          end,
-          createdAt:
-            d.createdAt?.toDate?.() ??
-            (typeof d.createdAt === "string"
-              ? new Date(d.createdAt)
-              : new Date()),
-        };
-      });
-
-      console.log("📦 Raw fetched planner events:", data);
-
-     const now = new Date();
-const upcoming = data.filter(
-  (p) =>
-    p.start instanceof Date &&
-    !isNaN(p.start) &&
-    // include events later today too
-    p.start.getTime() >= now.getTime() - 1000 * 60 * 60 * 24
-);
-
-
-      console.log("🎯 Filtered upcoming plans:", upcoming);
-
-      setPlans(upcoming.slice(0, 5));
-    },
-    (err) => {
-      console.error("❌ Firestore listener error:", err);
-    }
-  );
-
-  return () => unsubscribe();
-}, [user]);
-
+    return () => unsubscribe();
+  }, [user]);
 
   // Add / Delete boards
   const handleAddBoard = async () => {
@@ -273,7 +261,7 @@ const upcoming = data.filter(
         </div>
       </motion.div>
 
-      {/* ===== ✅ Mobile Sidebar Drawer ===== */}
+      {/* ===== Mobile Sidebar ===== */}
       <AnimatePresence>
         {isMobileOpen && (
           <>
@@ -337,7 +325,7 @@ const upcoming = data.filter(
         transition={{ duration: 0.3 }}
         className="flex-1 p-6 md:p-10 transition-all duration-300"
       >
-        {/* ===== Mobile Header ===== */}
+        {/* Mobile Header */}
         <div className="flex md:hidden justify-between items-center mb-6">
           <button
             onClick={() => setIsMobileOpen(true)}
@@ -360,39 +348,47 @@ const upcoming = data.filter(
               </span>
             </h1>
 
-            {/* ===== Summary Cards ===== */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
-              <div className="bg-white shadow-md rounded-2xl p-5 flex items-center justify-between">
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <div className="bg-white dark:bg-slate-800 shadow-md rounded-2xl p-5 flex items-center justify-between border border-slate-200 dark:border-slate-700">
                 <div>
-                  <p className="text-sm text-gray-500">Total Tasks</p>
-                  <h2 className="text-xl font-bold text-gray-800">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Total Tasks
+                  </p>
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
                     {taskStats.total}
                   </h2>
                 </div>
                 <CheckCircle className="text-green-500 w-8 h-8" />
               </div>
-              <div className="bg-white shadow-md rounded-2xl p-5 flex items-center justify-between">
+              <div className="bg-white dark:bg-slate-800 shadow-md rounded-2xl p-5 flex items-center justify-between border border-slate-200 dark:border-slate-700">
                 <div>
-                  <p className="text-sm text-gray-500">In Progress</p>
-                  <h2 className="text-xl font-bold text-gray-800">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    In Progress
+                  </p>
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
                     {taskStats.progress}
                   </h2>
                 </div>
                 <Clock className="text-yellow-500 w-8 h-8" />
               </div>
-              <div className="bg-white shadow-md rounded-2xl p-5 flex items-center justify-between">
+              <div className="bg-white dark:bg-slate-800 shadow-md rounded-2xl p-5 flex items-center justify-between border border-slate-200 dark:border-slate-700">
                 <div>
-                  <p className="text-sm text-gray-500">Pending</p>
-                  <h2 className="text-xl font-bold text-gray-800">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Pending
+                  </p>
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
                     {taskStats.pending}
                   </h2>
                 </div>
                 <FolderKanban className="text-indigo-500 w-8 h-8" />
               </div>
-              <div className="bg-white shadow-md rounded-2xl p-5 flex items-center justify-between">
+              <div className="bg-white dark:bg-slate-800 shadow-md rounded-2xl p-5 flex items-center justify-between border border-slate-200 dark:border-slate-700">
                 <div>
-                  <p className="text-sm text-gray-500">Completed</p>
-                  <h2 className="text-xl font-bold text-gray-800">
+                  <p className="text-sm text-slate-500 dark:text-slate-400">
+                    Completed
+                  </p>
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">
                     {taskStats.done}
                   </h2>
                 </div>
@@ -400,15 +396,38 @@ const upcoming = data.filter(
               </div>
             </div>
 
-            {/* ===== ✅ Upcoming Plans (Live from Firestore) ===== */}
-            <div className="bg-white dark:bg-slate-900 shadow-md rounded-2xl p-6 mb-8 transition-colors">
+            {/* 🔹 Quick Actions ABOVE Upcoming Plans */}
+            <div className="flex flex-wrap gap-4 mb-8">
+              <button
+                onClick={() => navigate("/summary")}
+                className="flex items-center gap-2 px-5 py-3 rounded-xl 
+                           bg-slate-200 hover:bg-slate-300 text-slate-800
+                           dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100
+                           transition font-medium"
+              >
+                <FolderKanban size={20} /> View Task Summary
+              </button>
+
+              <button
+                onClick={() => navigate("/planner-summary")}
+                className="flex items-center gap-2 px-5 py-3 rounded-xl 
+                           bg-slate-200 hover:bg-slate-300 text-slate-800
+                           dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100
+                           transition font-medium"
+              >
+                <Calendar size={20} /> View Planner Summary
+              </button>
+            </div>
+
+            {/* Upcoming Plans */}
+            <div className="bg-white dark:bg-slate-800 shadow-md rounded-2xl p-6 mb-8 border border-slate-200 dark:border-slate-700 transition-colors">
               <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 tracking-tight">
+                <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
                   Upcoming Plans
                 </h2>
                 <button
                   onClick={() => navigate("/planner")}
-                  className="text-sm px-4 py-2 rounded-md bg-indigo-50 dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-slate-700 transition font-medium"
+                  className="text-sm px-4 py-2 rounded-md bg-indigo-50 dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-slate-800 transition font-medium"
                 >
                   View Planner →
                 </button>
@@ -416,11 +435,11 @@ const upcoming = data.filter(
 
               <ul className="relative border-l border-slate-200 dark:border-slate-700 pl-6 space-y-6">
                 {plans.length === 0 ? (
-                  <p className="text-sm text-gray-500 dark:text-gray-400 ml-4">
+                  <p className="text-sm text-slate-500 dark:text-slate-400 ml-4">
                     No upcoming plans found. Create one in your{" "}
                     <span
                       onClick={() => navigate("/planner")}
-                      className="text-indigo-600 cursor-pointer hover:underline"
+                      className="text-indigo-600 dark:text-indigo-400 cursor-pointer hover:underline"
                     >
                       Planner
                     </span>
@@ -457,28 +476,28 @@ const upcoming = data.filter(
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.05 }}
-                        className="group relative bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md border border-transparent hover:border-indigo-100 dark:hover:border-slate-700 transition-all duration-300 cursor-pointer"
+                        className="group relative bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md border border-slate-200 dark:border-slate-700 transition-all duration-300 cursor-pointer"
                       >
                         <span className="absolute -left-[11px] top-5 w-5 h-5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 ring-4 ring-white dark:ring-slate-900 group-hover:scale-110 transition-transform"></span>
                         <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                          <h3 className="font-semibold text-gray-800 dark:text-gray-100 text-base mb-1 sm:mb-0 flex items-center gap-2">
+                          <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base mb-1 sm:mb-0 flex items-center gap-2">
                             {plan.title}
                             <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
                               {plan.tag}
                             </span>
                           </h3>
-                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
                             {formattedDate} • {formattedTime}
                           </span>
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                        <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
                           📍 {plan.location}
                         </p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-1 leading-snug">
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-snug">
                           {plan.description}
                         </p>
                         <div className="mt-3 flex justify-between items-center">
-                          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                             {countdownLabel}
                           </p>
                         </div>
@@ -494,24 +513,16 @@ const upcoming = data.filter(
                 )}
               </ul>
             </div>
-
-            {/* Quick Actions */}
-            <div className="flex flex-wrap gap-4">
-              <button
-                onClick={() => navigate("/summary")}
-                className="flex items-center gap-2 px-5 py-3 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition"
-              >
-                <FolderKanban size={20} /> View Task Summary
-              </button>
-            </div>
           </>
         ) : (
-          <>
-            <h1 className="text-3xl font-semibold text-slate-800 dark:text-slate-100 mb-8">
+          /* ===== Boards Page ===== */
+          <div className="bg-white dark:bg-slate-900 shadow-md rounded-2xl p-6 border border-slate-200 dark:border-slate-700">
+            <h1 className="text-3xl font-semibold text-slate-800 dark:text-slate-100 mb-6">
               Your Boards
             </h1>
+
             {loadingBoards ? (
-              <div className="flex justify-center items-center mt-20">
+              <div className="flex justify-center items-center mt-10">
                 <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
               </div>
             ) : boards.length === 0 ? (
@@ -562,20 +573,20 @@ const upcoming = data.filter(
             >
               <span className="text-lg font-medium">+ Create New Board</span>
             </div>
-          </>
+          </div>
         )}
 
-        {/* ===== Modal ===== */}
+        {/* ===== Modal (Create Board) ===== */}
         {isModalOpen && (
           <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
             <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl p-6 w-80 relative">
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="absolute top-3 right-3 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                className="absolute top-3 right-3 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
               >
                 <X size={18} />
               </button>
-              <h2 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-4">
                 Create New Board
               </h2>
               <input
@@ -583,7 +594,7 @@ const upcoming = data.filter(
                 placeholder="Enter board name"
                 value={newBoardName}
                 onChange={(e) => setNewBoardName(e.target.value)}
-                className="w-full border border-gray-300 dark:border-slate-700 rounded-lg p-2 mb-4 bg-transparent text-gray-800 dark:text-gray-100"
+                className="w-full border border-slate-300 dark:border-slate-700 rounded-lg p-2 mb-4 bg-transparent text-slate-800 dark:text-slate-100"
               />
               <button
                 onClick={handleAddBoard}
