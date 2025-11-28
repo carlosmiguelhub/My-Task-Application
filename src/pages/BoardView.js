@@ -14,7 +14,7 @@ import {
   Archive,
   FileText,
 } from "lucide-react";
-import { db } from "../firebase";
+import { db, storage } from "../firebase";
 import {
   collection,
   addDoc,
@@ -28,10 +28,11 @@ import {
   getDoc,
   setDoc,
 } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { useSelector } from "react-redux";
 
 /* ==========================================================
-   ✅ COUNTDOWN TIMER (no change needed)
+   COUNTDOWN TIMER
    ========================================================== */
 const CountdownTimer = ({ dueDate, createdAt, status }) => {
   const [timeLeft, setTimeLeft] = useState("");
@@ -112,7 +113,7 @@ const CountdownTimer = ({ dueDate, createdAt, status }) => {
 };
 
 /* ==========================================================
-   ✅ MAIN BOARD VIEW COMPONENT
+   MAIN BOARD VIEW
    ========================================================== */
 const BoardView = () => {
   const { id } = useParams();
@@ -122,22 +123,26 @@ const BoardView = () => {
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // 🔹 Modal state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editTaskId, setEditTaskId] = useState(null);
 
-  // 🔹 Task form
+  // files selected for upload in modal
+  const [selectedFiles, setSelectedFiles] = useState([]);
+
+  // task form
   const [newTask, setNewTask] = useState({
     title: "",
     priority: "Normal",
     status: "Pending",
     dueDate: new Date(),
     dueTime: "",
+    documents: [],
   });
 
   useEffect(() => {
     if (!user || !id) return;
+
     const q = query(
       collection(db, "users", user.uid, "boards", id, "tasks"),
       orderBy("createdAt", "asc")
@@ -147,14 +152,42 @@ const BoardView = () => {
       setTasks(list);
       setLoading(false);
     });
+
     return () => unsub();
   }, [user, id]);
 
   /* ==========================================================
-     ✅ ADD OR UPDATE TASK
+     helper: upload files for a task
+     ========================================================== */
+  const uploadFilesForTask = async (taskId, files) => {
+    if (!files || files.length === 0) return [];
+
+    const uploads = await Promise.all(
+      files.map(async (file) => {
+        const storageRef = ref(
+          storage,
+          `users/${user.uid}/boards/${id}/tasks/${taskId}/${Date.now()}_${file.name}`
+        );
+        const snap = await uploadBytes(storageRef, file);
+        const url = await getDownloadURL(snap.ref);
+
+        return {
+          name: file.name,
+          url,
+          path: snap.ref.fullPath,
+        };
+      })
+    );
+
+    return uploads;
+  };
+
+  /* ==========================================================
+     ADD / EDIT TASK
      ========================================================== */
   const handleSaveTask = async () => {
     if (!newTask.title.trim()) return;
+    if (!user || !id) return;
 
     try {
       const combinedDueDate = new Date(newTask.dueDate);
@@ -164,13 +197,36 @@ const BoardView = () => {
       }
 
       if (isEditing && editTaskId) {
-        await updateDoc(
-          doc(db, "users", user.uid, "boards", id, "tasks", editTaskId),
-          {
-            ...newTask,
-            dueDate: combinedDueDate,
-          }
+        const taskRef = doc(
+          db,
+          "users",
+          user.uid,
+          "boards",
+          id,
+          "tasks",
+          editTaskId
         );
+
+        const existingDocs = Array.isArray(newTask.documents)
+          ? newTask.documents
+          : [];
+
+        const newDocs =
+          selectedFiles.length > 0
+            ? await uploadFilesForTask(editTaskId, selectedFiles)
+            : [];
+
+        const documents = [...existingDocs, ...newDocs];
+
+        await updateDoc(taskRef, {
+          title: newTask.title,
+          priority: newTask.priority,
+          status: newTask.status,
+          dueDate: combinedDueDate,
+          dueTime: newTask.dueTime,
+          documents,
+        });
+
         await createNotification(
           user.uid,
           "Task Updated",
@@ -178,12 +234,29 @@ const BoardView = () => {
           "info"
         );
       } else {
-        await addDoc(collection(db, "users", user.uid, "boards", id, "tasks"), {
-          ...newTask,
+        // create task first, then upload docs using its id
+        const baseData = {
+          title: newTask.title,
+          priority: newTask.priority,
+          status: newTask.status,
           dueDate: combinedDueDate,
+          dueTime: newTask.dueTime,
+          documents: [],
           createdAt: serverTimestamp(),
           startTime: new Date().toISOString(),
-        });
+        };
+
+        const docRef = await addDoc(
+          collection(db, "users", user.uid, "boards", id, "tasks"),
+          baseData
+        );
+
+        let documents = [];
+        if (selectedFiles.length > 0) {
+          documents = await uploadFilesForTask(docRef.id, selectedFiles);
+          await updateDoc(docRef, { documents });
+        }
+
         await createNotification(
           user.uid,
           "Task Created",
@@ -192,21 +265,33 @@ const BoardView = () => {
         );
       }
 
+      // reset modal + form
       setIsModalOpen(false);
       setIsEditing(false);
       setEditTaskId(null);
+      setSelectedFiles([]);
       setNewTask({
         title: "",
         priority: "Normal",
         status: "Pending",
         dueDate: new Date(),
         dueTime: "",
+        documents: [],
       });
     } catch (err) {
       console.error("Error saving task:", err);
+      await createNotification(
+        user?.uid,
+        "Upload Failed",
+        "There was an error uploading documents.",
+        "error"
+      );
     }
   };
 
+  /* ==========================================================
+     OTHER ACTIONS
+     ========================================================== */
   const handleDelete = async (taskId) => {
     await deleteDoc(doc(db, "users", user.uid, "boards", id, "tasks", taskId));
     await createNotification(user.uid, "Task Deleted", "Deleted task.", "warn");
@@ -252,7 +337,9 @@ const BoardView = () => {
       status: task.status,
       dueDate: due,
       dueTime: due.toTimeString().slice(0, 5),
+      documents: task.documents || [],
     });
+    setSelectedFiles([]);
     setEditTaskId(task.id);
     setIsEditing(true);
     setIsModalOpen(true);
@@ -268,7 +355,7 @@ const BoardView = () => {
   };
 
   /* ==========================================================
-     ✅ UI
+     UI
      ========================================================== */
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-slate-100 dark:from-slate-900 dark:via-slate-800 dark:to-slate-950 text-slate-900 dark:text-white p-6 md:p-10">
@@ -298,12 +385,14 @@ const BoardView = () => {
             onClick={() => {
               setIsModalOpen(true);
               setIsEditing(false);
+              setSelectedFiles([]);
               setNewTask({
                 title: "",
                 priority: "Normal",
                 status: "Pending",
                 dueDate: new Date(),
                 dueTime: "",
+                documents: [],
               });
             }}
             className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg text-sm text-white"
@@ -389,6 +478,33 @@ const BoardView = () => {
                       status={task.status}
                     />
 
+                    {/* 📎 Attached documents with Preview */}
+                    {task.documents && task.documents.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {task.documents.map((docItem, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between text-xs bg-white/70 dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200/70 dark:border-slate-700/70"
+                          >
+                            <div className="flex items-center gap-1 overflow-hidden">
+                              <FileText size={14} className="text-indigo-500" />
+                              <span className="truncate max-w-[140px]">
+                                {docItem.name || `Document ${idx + 1}`}
+                              </span>
+                            </div>
+                            <button
+                              onClick={() =>
+                                window.open(docItem.url, "_blank", "noopener")
+                              }
+                              className="ml-2 px-2 py-0.5 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white text-[11px]"
+                            >
+                              Preview
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
                     <div className="flex gap-2 mt-2">
                       {task.status === "Pending" && (
                         <button
@@ -441,9 +557,56 @@ const BoardView = () => {
               type="text"
               placeholder="Task title"
               value={newTask.title}
-              onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+              onChange={(e) =>
+                setNewTask({ ...newTask, title: e.target.value })
+              }
               className="w-full bg-slate-50 dark:bg-slate-900 border rounded-lg px-4 py-2 mb-3"
             />
+
+            {/* Attach Documents */}
+            <div className="mb-3">
+              <label className="block text-sm text-slate-600 dark:text-slate-400 mb-1">
+                Attach Documents
+              </label>
+              <input
+                type="file"
+                multiple
+                onChange={(e) =>
+                  setSelectedFiles(Array.from(e.target.files || []))
+                }
+                className="w-full bg-slate-50 dark:bg-slate-900 border rounded-lg px-3 py-2 text-sm"
+              />
+              {selectedFiles.length > 0 && (
+                <p className="text-xs text-slate-500 mt-1">
+                  {selectedFiles.length} file(s) selected
+                </p>
+              )}
+
+              {/* Existing docs in edit mode if no new selection */}
+              {isEditing &&
+                newTask.documents &&
+                newTask.documents.length > 0 &&
+                selectedFiles.length === 0 && (
+                  <div className="mt-2 text-xs">
+                    <p className="text-slate-500 mb-1">Existing documents:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      {newTask.documents.map((docItem, idx) => (
+                        <li key={idx}>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              window.open(docItem.url, "_blank", "noopener")
+                            }
+                            className="text-indigo-500 hover:underline"
+                          >
+                            {docItem.name || `Document ${idx + 1}`}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+            </div>
 
             {/* Priority */}
             <div className="mb-3">
@@ -489,7 +652,10 @@ const BoardView = () => {
 
             <div className="flex justify-end gap-3 mt-5">
               <button
-                onClick={() => setIsModalOpen(false)}
+                onClick={() => {
+                  setIsModalOpen(false);
+                  setSelectedFiles([]);
+                }}
                 className="px-4 py-2 text-slate-600 dark:text-slate-400"
               >
                 Cancel

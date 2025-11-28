@@ -28,6 +28,8 @@ import GoogleCalendarTest from "./pages/GoogleCalendarTest";
 import Documents from "./pages/Documents";
 import { Toaster } from "react-hot-toast";
 import ArchiveView from "./pages/ArchiveView";
+import BoardDocuments from "./pages/BoardDocuments"; 
+import Summary from "./pages/Summary";
 
 /* ✅ Layout Wrapper — Handles Navbar/Footer visibility */
 function LayoutWrapper({ children }) {
@@ -95,6 +97,7 @@ function App() {
         <Toaster position="top-right" />
 
         <AnimatePresence mode="wait">
+
           <Routes location={location} key={location.pathname}>
             {/* =================== PUBLIC ROUTES =================== */}
             <Route
@@ -135,6 +138,8 @@ function App() {
                 </ProtectedRoute>
               }
             />
+                      <Route path="/board/:id/documents" element={<BoardDocuments />} />
+
 
             <Route
               path="/archive/:id"
@@ -198,10 +203,14 @@ function App() {
               }
             />
 
-            {/* Optional alias: /summary → /planner-summary */}
+        
             <Route
               path="/summary"
-              element={<Navigate to="/planner-summary" replace />}
+              element={ <PageTransition>
+                    <Summary />
+                  </PageTransition>
+                }
+              
             />
 
             <Route path="/calendar-test" element={<GoogleCalendarTest />} />
