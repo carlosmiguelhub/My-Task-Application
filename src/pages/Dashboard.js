@@ -31,6 +31,73 @@ import {
   getDocs,
 } from "firebase/firestore";
 
+/* ==========================================================
+   PLAN COUNTDOWN (Dashboard)
+   Syncs with planner by using createdAt → end
+   ========================================================== */
+const formatDiff = (ms) => {
+  const abs = Math.abs(ms);
+  const days = Math.floor(abs / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((abs / (1000 * 60 * 60)) % 24);
+  const minutes = Math.floor((abs / (1000 * 60)) % 60);
+  const seconds = Math.floor((abs / 1000) % 60);
+  return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+};
+
+const PlanCountdown = ({ createdAt, end }) => {
+  const [timeLeft, setTimeLeft] = useState("");
+  const [duration, setDuration] = useState("");
+
+  useEffect(() => {
+    if (!end) return;
+
+    const endDate = end instanceof Date ? end : new Date(end);
+    const createdDate = createdAt
+      ? createdAt instanceof Date
+        ? createdAt
+        : new Date(createdAt)
+      : null;
+
+    const tick = () => {
+      const now = Date.now();
+      const endMs = endDate.getTime();
+      const remaining = endMs - now;
+
+      if (remaining <= 0) {
+        setTimeLeft(`Expired (${formatDiff(remaining)} ago)`);
+      } else {
+        setTimeLeft(formatDiff(remaining));
+      }
+
+      if (createdDate) {
+        const durMs = endMs - createdDate.getTime();
+        setDuration(formatDiff(durMs));
+      } else {
+        setDuration("");
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [createdAt, end]);
+
+  if (!end) return null;
+
+  return (
+    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 space-y-0.5">
+      <div>
+        <span className="font-semibold">Duration:</span>{" "}
+        {duration || "—"}
+      </div>
+      <div>
+        <span className="font-semibold">Time left:</span>{" "}
+        {timeLeft}
+      </div>
+    </div>
+  );
+};
+
 const Dashboard = () => {
   const { user } = useSelector((state) => state.auth);
   const navigate = useNavigate();
@@ -145,8 +212,8 @@ const Dashboard = () => {
           return;
         }
 
-        const data = snapshot.docs.map((doc) => {
-          const d = doc.data();
+        const data = snapshot.docs.map((docSnap) => {
+          const d = docSnap.data();
           const start =
             d.start?.toDate?.() ??
             (typeof d.start === "string" ? new Date(d.start) : null);
@@ -155,7 +222,7 @@ const Dashboard = () => {
             (typeof d.end === "string" ? new Date(d.end) : null);
 
           return {
-            id: doc.id,
+            id: docSnap.id,
             title: d.title || "Untitled Plan",
             description: d.description || "",
             tag: d.agenda || "General",
@@ -496,6 +563,13 @@ const Dashboard = () => {
                         <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-snug">
                           {plan.description}
                         </p>
+
+                        {/* ⏳ Duration + Time Left (synced with planner) */}
+                        <PlanCountdown
+                          createdAt={plan.createdAt}
+                          end={plan.end}
+                        />
+
                         <div className="mt-3 flex justify-between items-center">
                           <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
                             {countdownLabel}

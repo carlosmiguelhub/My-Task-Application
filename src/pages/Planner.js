@@ -36,6 +36,75 @@ const PRIORITY_COLORS = {
   low: ["#10b981", "#34d399", "#059669"],
 };
 
+/* ==========================================================
+   COUNTDOWN TIMER (from createdAt → due/end)
+   ========================================================== */
+const CountdownTimer = ({ createdAt, dueDate, compact = false }) => {
+  const [timeLeft, setTimeLeft] = useState("");
+  const [duration, setDuration] = useState("");
+
+  useEffect(() => {
+    if (!dueDate) return;
+
+    const created = createdAt ? new Date(createdAt) : null;
+    const end = new Date(dueDate);
+
+    const formatDiff = (ms) => {
+      const abs = Math.abs(ms);
+      const days = Math.floor(abs / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((abs / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((abs / (1000 * 60)) % 60);
+      const seconds = Math.floor((abs / 1000) % 60);
+      return `${days}d ${hours}h ${minutes}m ${seconds}s`;
+    };
+
+    const tick = () => {
+      const now = Date.now();
+      const endMs = end.getTime();
+      const remaining = endMs - now;
+
+      if (remaining <= 0) {
+        setTimeLeft(`Expired (${formatDiff(remaining)} ago)`);
+      } else {
+        setTimeLeft(formatDiff(remaining));
+      }
+
+      if (created) {
+        const durationMs = endMs - created.getTime();
+        setDuration(formatDiff(durationMs));
+      } else {
+        setDuration("");
+      }
+    };
+
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [createdAt, dueDate]);
+
+  if (!dueDate) return null;
+
+  if (compact) {
+    return (
+      <div className="mt-1 text-[10px] text-white/80">
+        ⏳ {timeLeft}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3 text-xs text-slate-600 dark:text-slate-200 space-y-1">
+      <div>
+        <span className="font-medium">Duration (created → due):</span>{" "}
+        {duration || "—"}
+      </div>
+      <div>
+        <span className="font-medium">Time left:</span> {timeLeft}
+      </div>
+    </div>
+  );
+};
+
 export default function PlannerWeekly() {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -183,6 +252,11 @@ Make it friendly, actionable, and around 2–3 sentences.`;
                 ? raw.start.toDate()
                 : new Date(raw.start),
               end: raw.end?.toDate ? raw.end.toDate() : new Date(raw.end),
+              createdAt: raw.createdAt?.toDate
+                ? raw.createdAt.toDate()
+                : raw.createdAt
+                ? new Date(raw.createdAt)
+                : null,
             };
           });
           setEvents(data);
@@ -234,7 +308,7 @@ Make it friendly, actionable, and around 2–3 sentences.`;
         end: new Date(end),
         color,
         allDay: false,
-        createdAt: new Date(),
+        createdAt: new Date(), // 👈 used for duration timer
       };
 
       const path = `users/${user.uid}/plannerEvents`;
@@ -375,6 +449,13 @@ Make it friendly, actionable, and around 2–3 sentences.`;
         {format(event.start, "h:mm a")} – {format(event.end, "h:mm a")}
       </div>
 
+      {/* ⏳ Compact countdown inside the event block */}
+      <CountdownTimer
+        createdAt={event.createdAt}
+        dueDate={event.end}
+        compact
+      />
+
       {hoveredEventId === event.id && (
         <motion.div
           initial={{ opacity: 0, x: 8 }}
@@ -416,6 +497,11 @@ Make it friendly, actionable, and around 2–3 sentences.`;
       </div>
     );
   }
+
+  // For the modal countdown, pick due date from slot or event
+  const modalDueDate = selectedSlot?.end || editingEvent?.end;
+  const modalCreatedAt =
+    editingEvent?.createdAt || (editingEvent ? editingEvent.start : null);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-white to-slate-100 dark:from-slate-900 dark:to-slate-950 p-4 md:p-8">
@@ -606,6 +692,15 @@ Make it friendly, actionable, and around 2–3 sentences.`;
                 }
                 className="w-full h-24 border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 rounded-xl px-3 py-2 focus:ring-2 focus:ring-indigo-400 outline-none resize-none mb-4"
               />
+
+              {/* ⏳ Full countdown + duration inside modal */}
+              {modalDueDate && (
+                <CountdownTimer
+                  createdAt={modalCreatedAt}
+                  dueDate={modalDueDate}
+                  compact={false}
+                />
+              )}
 
               <div className="flex justify-end gap-3 mt-5">
                 {editingEvent && (
