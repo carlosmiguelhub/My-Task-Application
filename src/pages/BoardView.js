@@ -244,6 +244,7 @@ const BoardView = () => {
           documents: [],
           createdAt: serverTimestamp(),
           startTime: new Date().toISOString(),
+          userEmail: user?.email || null, // ✅ store email for reminders
         };
 
         const docRef = await addDoc(
