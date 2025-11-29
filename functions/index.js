@@ -1,5 +1,5 @@
 /* ==========================================================
-   ✅ FIREBASE CLOUD FUNCTION — DEADLINE REMINDER SYSTEM (v2, env vars)
+   ✅ FIREBASE CLOUD FUNCTION — DEADLINE & PLANNER REMINDERS (v2, env vars)
    ========================================================== */
 
 import { onSchedule } from "firebase-functions/v2/scheduler";
@@ -37,7 +37,7 @@ if (!SENDER_EMAIL) {
 const APP_NAME = "Task Master";
 
 /* ==========================================================
-   ⏰ Scheduled reminder function
+   ⏰ Scheduled reminder function — TASK DEADLINES
    ========================================================== */
 export const sendDeadlineReminders = onSchedule(
   {
@@ -75,7 +75,7 @@ export const sendDeadlineReminders = onSchedule(
         .where("dueDate", "<=", windowEnd)
         .get();
 
-      logger.info(`📊 Query returned ${tasksSnap.size} docs`);
+      logger.info(`📊 Task query returned ${tasksSnap.size} docs`);
 
       if (tasksSnap.empty) {
         logger.info("✅ No tasks due within the reminder window.");
@@ -148,10 +148,7 @@ export const sendDeadlineReminders = onSchedule(
           })
           .catch((err) => {
             const body = err?.response?.body;
-            logger.error(
-              "❌ SendGrid email failed:",
-              body || err.toString()
-            );
+            logger.error("❌ SendGrid email failed:", body || String(err));
           });
 
         const pathParts = docSnap.ref.path.split("/"); // users/{uid}/boards/{bid}/tasks/{tid}
@@ -178,7 +175,7 @@ export const sendDeadlineReminders = onSchedule(
       }
 
       await Promise.all(reminders);
-      logger.info(`✅ All reminders processed. Count = ${reminders.length}`);
+      logger.info(`✅ All task reminders processed. Count = ${reminders.length}`);
       return null;
     } catch (err) {
       logger.error("❌ sendDeadlineReminders failed (outer catch):", err);
@@ -188,7 +185,7 @@ export const sendDeadlineReminders = onSchedule(
 );
 
 /* ==========================================================
-   🧪 Debug endpoint – inspect window and tasks from server side
+   🧪 Debug endpoint – inspect TASK window and tasks
    ========================================================== */
 
 export const debugDeadlineWindow = onRequest(async (req, res) => {
@@ -232,6 +229,235 @@ export const debugDeadlineWindow = onRequest(async (req, res) => {
     });
   } catch (err) {
     logger.error("❌ debugDeadlineWindow failed:", err);
+    res.status(500).send(String(err));
+  }
+});
+
+/* ==========================================================
+   📅 Scheduled reminder function — UPCOMING PLANS (Planner)
+   🚀 PRODUCTION: runs hourly, checks next 24 hours
+   ========================================================== */
+
+export const sendUpcomingPlanReminders = onSchedule(
+  {
+    schedule: "every 60 minutes", // production: hourly
+    timeZone: "Asia/Manila",
+    memory: "512MiB",
+    timeoutSeconds: 120,
+  },
+  async () => {
+    try {
+      if (!SENDGRID_API_KEY || !SENDER_EMAIL) {
+        logger.error(
+          "❌ SENDGRID_KEY or SENDGRID_FROM missing. Skipping upcoming plan emails for this run."
+        );
+        return null;
+      }
+
+      const now = new Date();
+      const REMINDER_WINDOW_HOURS = 24; // 🔥 send reminders for plans within the next day
+      const windowEnd = new Date(
+        now.getTime() + REMINDER_WINDOW_HOURS * 60 * 60 * 1000
+      );
+
+      logger.info(
+        `🔍 Checking planner events starting between now and +${REMINDER_WINDOW_HOURS} hours`,
+        {
+          nowIso: now.toISOString(),
+          windowEndIso: windowEnd.toISOString(),
+        }
+      );
+
+      const plansSnap = await db
+        .collectionGroup("plannerEvents")
+        .where("start", ">", now)
+        .where("start", "<=", windowEnd)
+        .where("upcomingEmailSent", "==", false)
+        .get();
+
+      logger.info(`📊 Planner query returned ${plansSnap.size} docs`);
+
+      if (plansSnap.empty) {
+        logger.info("✅ No upcoming plans within the reminder window.");
+        return null;
+      }
+
+      const jobs = [];
+
+      for (const docSnap of plansSnap.docs) {
+        const plan = docSnap.data();
+
+        logger.info("🔎 Candidate plan", {
+          id: docSnap.id,
+          title: plan.title,
+          agenda: plan.agenda,
+          where: plan.where,
+          upcomingEmailSent: plan.upcomingEmailSent || false,
+          startIso: plan.start?.toDate
+            ? plan.start.toDate().toISOString()
+            : String(plan.start),
+        });
+
+        const startDate = plan.start?.toDate
+          ? plan.start.toDate()
+          : new Date(plan.start);
+
+        if (isNaN(startDate.getTime())) {
+          logger.warn(
+            `⚠️ Plan ${docSnap.id} has invalid start date, skipping.`
+          );
+          continue;
+        }
+
+        // Derive user id from path: users/{uid}/plannerEvents/{eventId}
+        const pathParts = docSnap.ref.path.split("/");
+        const usersIndex = pathParts.indexOf("users");
+        const userId =
+          usersIndex >= 0 && pathParts.length > usersIndex + 1
+            ? pathParts[usersIndex + 1]
+            : null;
+
+        if (!userId) {
+          logger.warn(
+            `⚠️ Could not determine userId from path ${docSnap.ref.path}, skipping.`
+          );
+          continue;
+        }
+
+        // Get user email from /users/{uid}
+        const userDoc = await db.collection("users").doc(userId).get();
+        const userData = userDoc.data();
+        const userEmail = userData?.email;
+
+        if (!userEmail) {
+          logger.warn(
+            `⚠️ User ${userId} has no email in /users/{uid}, skipping plan ${docSnap.id}.`
+          );
+          continue;
+        }
+
+        const title = plan.title || "Upcoming plan";
+        const agenda = plan.agenda || "";
+        const where = plan.where || "";
+
+        const formattedStart = startDate.toLocaleString("en-PH", {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+
+        const subject = `📅 Reminder: "${title}" is coming up`;
+        const htmlLines = [
+          `<h2 style="color:#4f46e5;">${APP_NAME}</h2>`,
+          `<p>Hi there,</p>`,
+          `<p>This is a reminder that you have an upcoming plan:</p>`,
+          `<p><strong>${title}</strong></p>`,
+          agenda ? `<p><strong>Agenda:</strong> ${agenda}</p>` : "",
+          where ? `<p><strong>Where:</strong> ${where}</p>` : "",
+          `<p><strong>When:</strong> ${formattedStart}</p>`,
+          `<p>Good luck, and stay productive! 🚀</p>`,
+          `<hr/>`,
+          `<p style="font-size:12px;color:#777;">This is an automated planner reminder from ${APP_NAME}.</p>`,
+        ].filter(Boolean);
+
+        const msg = {
+          to: userEmail,
+          from: { email: SENDER_EMAIL, name: APP_NAME },
+          subject,
+          html: htmlLines.join(""),
+        };
+
+        const emailPromise = sgMail
+          .send(msg)
+          .then(() => {
+            logger.info(
+              `📧 Upcoming plan email sent to ${userEmail} for plan "${title}".`
+            );
+          })
+          .catch((err) => {
+            const body = err?.response?.body;
+            logger.error(
+              "❌ SendGrid upcoming plan email failed:",
+              body || String(err)
+            );
+          });
+
+        const notifPromise = db
+          .collection("users")
+          .doc(userId)
+          .collection("notifications")
+          .add({
+            title: "Upcoming Plan",
+            message: `"${title}" is scheduled at ${formattedStart}.`,
+            type: "info",
+            createdAt: FieldValue.serverTimestamp(),
+          });
+
+        const markSentPromise = docSnap.ref.update({
+          upcomingEmailSent: true,
+        });
+
+        jobs.push(Promise.all([emailPromise, notifPromise, markSentPromise]));
+      }
+
+      await Promise.all(jobs);
+      logger.info(
+        `✅ All upcoming plan reminders processed. Count = ${jobs.length}`
+      );
+      return null;
+    } catch (err) {
+      logger.error("❌ sendUpcomingPlanReminders failed (outer catch):", err);
+      throw err;
+    }
+  }
+);
+
+/* ==========================================================
+   🧪 Debug endpoint – inspect PLANNER window and plans (24h)
+   ========================================================== */
+
+export const debugUpcomingPlansWindow = onRequest(async (req, res) => {
+  try {
+    const now = new Date();
+    const REMINDER_WINDOW_HOURS = 24;
+    const windowEnd = new Date(
+      now.getTime() + REMINDER_WINDOW_HOURS * 60 * 60 * 1000
+    );
+
+    const snap = await db.collectionGroup("plannerEvents").get();
+
+    const rows = [];
+    snap.forEach((docSnap) => {
+      const p = docSnap.data();
+      if (!p.start) return;
+
+      const start = p.start?.toDate ? p.start.toDate() : new Date(p.start);
+      if (isNaN(start.getTime())) return;
+
+      const inWindow = start > now && start <= windowEnd;
+
+      rows.push({
+        id: docSnap.id,
+        path: docSnap.ref.path,
+        title: p.title,
+        agenda: p.agenda,
+        where: p.where,
+        upcomingEmailSent: p.upcomingEmailSent || false,
+        startIso: start.toISOString(),
+        inWindow,
+      });
+    });
+
+    res.status(200).json({
+      nowIso: now.toISOString(),
+      windowEndIso: windowEnd.toISOString(),
+      totalPlans: rows.length,
+      plans: rows,
+    });
+  } catch (err) {
+    logger.error("❌ debugUpcomingPlansWindow failed:", err);
     res.status(500).send(String(err));
   }
 });

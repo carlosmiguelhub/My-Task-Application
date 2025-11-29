@@ -1,5 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Calendar as RBCalendar, momentLocalizer, Views } from "react-big-calendar";
+import {
+  Calendar as RBCalendar,
+  momentLocalizer,
+  Views,
+} from "react-big-calendar";
 import withDragAndDrop from "react-big-calendar/lib/addons/dragAndDrop";
 import moment from "moment-timezone";
 import { format } from "date-fns";
@@ -39,15 +43,22 @@ const PRIORITY_COLORS = {
 /* ==========================================================
    COUNTDOWN TIMER (from createdAt → due/end)
    ========================================================== */
+const normalizeDate = (value) => {
+  if (!value) return null;
+  if (value instanceof Date) return value;
+  if (value?.toDate) return value.toDate(); // Firestore Timestamp
+  return new Date(value);
+};
+
 const CountdownTimer = ({ createdAt, dueDate, compact = false }) => {
   const [timeLeft, setTimeLeft] = useState("");
   const [duration, setDuration] = useState("");
 
   useEffect(() => {
-    if (!dueDate) return;
+    const end = normalizeDate(dueDate);
+    if (!end) return;
 
-    const created = createdAt ? new Date(createdAt) : null;
-    const end = new Date(dueDate);
+    const created = normalizeDate(createdAt);
 
     const formatDiff = (ms) => {
       const abs = Math.abs(ms);
@@ -85,11 +96,7 @@ const CountdownTimer = ({ createdAt, dueDate, compact = false }) => {
   if (!dueDate) return null;
 
   if (compact) {
-    return (
-      <div className="mt-1 text-[10px] text-white/80">
-        ⏳ {timeLeft}
-      </div>
-    );
+    return <div className="mt-1 text-[10px] text-white/80">⏳ {timeLeft}</div>;
   }
 
   return (
@@ -291,7 +298,7 @@ Make it friendly, actionable, and around 2–3 sentences.`;
     return shades[sameDayEvents.length % shades.length];
   };
 
-  // ✅ ADD NEW EVENT
+  // ✅ ADD NEW EVENT  (🔗 users/{uid}/plannerEvents)
   const handleAddEvent = async () => {
     try {
       if (!user) throw new Error("You must be logged in.");
@@ -308,7 +315,8 @@ Make it friendly, actionable, and around 2–3 sentences.`;
         end: new Date(end),
         color,
         allDay: false,
-        createdAt: new Date(), // 👈 used for duration timer
+        createdAt: new Date(), // used for duration timer
+        upcomingEmailSent: false, // used by Cloud Function reminders
       };
 
       const path = `users/${user.uid}/plannerEvents`;
@@ -358,7 +366,7 @@ Make it friendly, actionable, and around 2–3 sentences.`;
     setIsModalOpen(true);
   };
 
-  // ✅ SAVE EDIT
+  // ✅ SAVE EDIT  (🔗 users/{uid}/plannerEvents/{eventId})
   const handleSaveEdit = async () => {
     try {
       if (!editingEvent || !user) throw new Error("No event / not logged in.");
@@ -386,7 +394,7 @@ Make it friendly, actionable, and around 2–3 sentences.`;
     }
   };
 
-  // ✅ DELETE
+  // ✅ DELETE  (🔗 users/{uid}/plannerEvents/{eventId})
   const handleDeleteEvent = async () => {
     try {
       if (!editingEvent || !user) throw new Error("No event / not logged in.");
@@ -401,7 +409,7 @@ Make it friendly, actionable, and around 2–3 sentences.`;
     }
   };
 
-  // ✅ DRAG & RESIZE
+  // ✅ DRAG & RESIZE  (🔗 users/{uid}/plannerEvents/{eventId})
   const handleEventMoveOrResize = async ({ event, start, end }) => {
     try {
       if (!user) throw new Error("Not logged in.");
@@ -450,11 +458,7 @@ Make it friendly, actionable, and around 2–3 sentences.`;
       </div>
 
       {/* ⏳ Compact countdown inside the event block */}
-      <CountdownTimer
-        createdAt={event.createdAt}
-        dueDate={event.end}
-        compact
-      />
+      <CountdownTimer createdAt={event.createdAt} dueDate={event.end} compact />
 
       {hoveredEventId === event.id && (
         <motion.div

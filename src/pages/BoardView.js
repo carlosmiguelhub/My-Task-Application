@@ -102,9 +102,9 @@ const CountdownTimer = ({ dueDate, createdAt, status }) => {
       >
         {timeLeft}
       </p>
-      <div className="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+      <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
         <div
-          className={`h-2 ${barColor} transition-all duration-300`}
+          className={`h-1.5 ${barColor} transition-all duration-300`}
           style={{ width: `${progress}%` }}
         ></div>
       </div>
@@ -355,6 +355,28 @@ const BoardView = () => {
     Low: "bg-green-500/20 text-green-600 dark:text-green-400 border-green-400/30",
   };
 
+  // 🎨 Trello-like column/card config
+  const columnStyles = {
+    Pending: {
+      icon: AlertCircle,
+      pillBg:
+        "bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-100",
+      cardBorder: "border-l-4 border-amber-400",
+    },
+    "In Progress": {
+      icon: Calendar,
+      pillBg:
+        "bg-sky-100 text-sky-700 dark:bg-sky-500/20 dark:text-sky-100",
+      cardBorder: "border-l-4 border-sky-400",
+    },
+    Done: {
+      icon: CheckCircle,
+      pillBg:
+        "bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-100",
+      cardBorder: "border-l-4 border-emerald-400",
+    },
+  };
+
   /* ==========================================================
      UI
      ========================================================== */
@@ -372,7 +394,7 @@ const BoardView = () => {
         <div className="flex gap-3">
           <button
             onClick={() => navigate(`/archive/${id}`)}
-            className="flex items-center gap-2 bg-slate-700 hover:bg-slate-800 px-4 py-2 rounded-lg text-sm text-white"
+            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-900 px-4 py-2 rounded-lg text-sm text-white"
           >
             <Archive size={18} /> View Archive
           </button>
@@ -409,136 +431,180 @@ const BoardView = () => {
           <div className="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {["Pending", "In Progress", "Done"].map((status) => (
-            <motion.div
-              key={status}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="bg-white/80 dark:bg-slate-800/80 border rounded-2xl p-4 shadow-lg"
-            >
-              <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-indigo-600 dark:text-indigo-400">
-                {status === "Pending" && <AlertCircle size={18} />}
-                {status === "In Progress" && <Calendar size={18} />}
-                {status === "Done" && <CheckCircle size={18} />}
-                {status}
-              </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 md:gap-6">
+          {["Pending", "In Progress", "Done"].map((status) => {
+            const cfg = columnStyles[status];
+            const Icon = cfg.icon;
+            const tasksInColumn = getTasksByStatus(status);
 
-              <AnimatePresence>
-                {getTasksByStatus(status).map((task) => (
-                  <motion.div
-                    key={task.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    className="p-3 bg-slate-100 dark:bg-slate-900/70 border rounded-xl mb-2 group"
+            return (
+              <motion.div
+                key={status}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex flex-col bg-slate-50/90 dark:bg-slate-900/80 rounded-2xl shadow-sm border border-slate-200/70 dark:border-slate-700/70 max-h-[80vh]"
+              >
+                {/* Column header */}
+                <div className="flex items-center justify-between px-4 pt-4 pb-3 border-b border-slate-200/70 dark:border-slate-700/70">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-indigo-100 dark:bg-indigo-500/20 text-indigo-600 dark:text-indigo-300">
+                      <Icon size={16} />
+                    </span>
+                    <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-100">
+                      {status}
+                    </h2>
+                  </div>
+                  <span
+                    className={`text-xs font-medium px-2.5 py-1 rounded-full ${cfg.pillBg}`}
                   >
-                    <div className="flex justify-between items-start mb-1">
-                      <h3
-                        className="font-medium text-slate-800 dark:text-white cursor-pointer"
-                        onClick={() => openEditModal(task)}
-                      >
-                        {task.title}
-                      </h3>
-                      <button
-                        onClick={() => handleDelete(task.id)}
-                        className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
+                    {tasksInColumn.length}{" "}
+                    {tasksInColumn.length === 1 ? "task" : "tasks"}
+                  </span>
+                </div>
 
-                    <div className="flex justify-between text-xs mb-2">
-                      <span
-                        className={`px-2 py-0.5 border rounded-full ${priorityColor[task.priority]}`}
-                      >
-                        {task.priority}
-                      </span>
-                      <span className="text-slate-500 dark:text-slate-400">
-                        {new Date(
-                          task.dueDate?.seconds
-                            ? task.dueDate.seconds * 1000
-                            : task.dueDate
-                        ).toLocaleString()}
-                      </span>
-                    </div>
-
-                    <CountdownTimer
-                      dueDate={
-                        task.dueDate?.seconds
-                          ? new Date(task.dueDate.seconds * 1000)
-                          : task.dueDate
-                      }
-                      createdAt={
-                        task.startTime
-                          ? new Date(task.startTime)
-                          : task.createdAt?.seconds
-                          ? new Date(task.createdAt.seconds * 1000)
-                          : new Date()
-                      }
-                      status={task.status}
-                    />
-
-                    {/* 📎 Attached documents with Preview */}
-                    {task.documents && task.documents.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {task.documents.map((docItem, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between text-xs bg-white/70 dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200/70 dark:border-slate-700/70"
-                          >
-                            <div className="flex items-center gap-1 overflow-hidden">
-                              <FileText size={14} className="text-indigo-500" />
-                              <span className="truncate max-w-[140px]">
-                                {docItem.name || `Document ${idx + 1}`}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() =>
-                                window.open(docItem.url, "_blank", "noopener")
-                              }
-                              className="ml-2 px-2 py-0.5 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white text-[11px]"
+                {/* Column body / list */}
+                <div className="flex-1 px-3 pb-4 pt-2 space-y-2 overflow-y-auto">
+                  <AnimatePresence initial={false}>
+                    {tasksInColumn.length === 0 ? (
+                      <p className="text-xs text-slate-400 dark:text-slate-500 mt-2 px-1">
+                        No tasks here yet. Drag or create a task to get started.
+                      </p>
+                    ) : (
+                      tasksInColumn.map((task) => (
+                        <motion.div
+                          key={task.id}
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: 8 }}
+                          className={`relative mt-1 p-3 bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200/70 dark:border-slate-700/70 hover:shadow-md hover:border-indigo-400/60 transition group cursor-pointer ${cfg.cardBorder}`}
+                        >
+                          <div className="flex justify-between items-start mb-1">
+                            <h3
+                              className="font-medium text-sm text-slate-800 dark:text-white pr-2"
+                              onClick={() => openEditModal(task)}
                             >
-                              Preview
+                              {task.title}
+                            </h3>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleDelete(task.id);
+                              }}
+                              className="opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-400 transition"
+                            >
+                              <Trash2 size={14} />
                             </button>
                           </div>
-                        ))}
-                      </div>
-                    )}
 
-                    <div className="flex gap-2 mt-2">
-                      {task.status === "Pending" && (
-                        <button
-                          onClick={() =>
-                            handleStatusUpdate(task.id, "In Progress")
-                          }
-                          className="px-3 py-1 bg-yellow-400 text-white rounded-md text-sm hover:bg-yellow-500"
-                        >
-                          Start
-                        </button>
-                      )}
-                      {task.status === "In Progress" && (
-                        <button
-                          onClick={() => handleStatusUpdate(task.id, "Done")}
-                          className="px-3 py-1 bg-green-500 text-white rounded-md text-sm hover:bg-green-600 flex items-center gap-1"
-                        >
-                          <CheckCircle size={14} /> Complete
-                        </button>
-                      )}
-                      {task.status === "Done" && (
-                        <button
-                          onClick={() => handleArchive(task.id)}
-                          className="px-3 py-1 bg-indigo-500 text-white rounded-md text-sm hover:bg-indigo-600 flex items-center gap-1"
-                        >
-                          <Archive size={14} /> Archive
-                        </button>
-                      )}
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
-            </motion.div>
-          ))}
+                          <div className="flex justify-between items-center text-[11px] mb-2">
+                            <span
+                              className={`px-2 py-0.5 border rounded-full ${priorityColor[task.priority]}`}
+                            >
+                              {task.priority}
+                            </span>
+                            <span className="text-slate-500 dark:text-slate-400">
+                              {new Date(
+                                task.dueDate?.seconds
+                                  ? task.dueDate.seconds * 1000
+                                  : task.dueDate
+                              ).toLocaleString()}
+                            </span>
+                          </div>
+
+                          <CountdownTimer
+                            dueDate={
+                              task.dueDate?.seconds
+                                ? new Date(task.dueDate.seconds * 1000)
+                                : task.dueDate
+                            }
+                            createdAt={
+                              task.startTime
+                                ? new Date(task.startTime)
+                                : task.createdAt?.seconds
+                                ? new Date(task.createdAt.seconds * 1000)
+                                : new Date()
+                            }
+                            status={task.status}
+                          />
+
+                          {/* 📎 Attached documents with Preview */}
+                          {task.documents && task.documents.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {task.documents.map((docItem, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-center justify-between text-[11px] bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200/70 dark:border-slate-700/70"
+                                >
+                                  <div className="flex items-center gap-1 overflow-hidden">
+                                    <FileText
+                                      size={13}
+                                      className="text-indigo-500"
+                                    />
+                                    <span className="truncate max-w-[140px]">
+                                      {docItem.name || `Document ${idx + 1}`}
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.open(
+                                        docItem.url,
+                                        "_blank",
+                                        "noopener"
+                                      );
+                                    }}
+                                    className="ml-2 px-2 py-0.5 rounded-md bg-indigo-500 hover:bg-indigo-600 text-white text-[10px]"
+                                  >
+                                    Preview
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+
+                          <div className="flex gap-2 mt-3">
+                            {task.status === "Pending" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStatusUpdate(task.id, "In Progress");
+                                }}
+                                className="px-3 py-1 bg-yellow-400 text-white rounded-md text-[11px] hover:bg-yellow-500"
+                              >
+                                Start
+                              </button>
+                            )}
+                            {task.status === "In Progress" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStatusUpdate(task.id, "Done");
+                                }}
+                                className="px-3 py-1 bg-green-500 text-white rounded-md text-[11px] hover:bg-green-600 flex items-center gap-1"
+                              >
+                                <CheckCircle size={12} /> Complete
+                              </button>
+                            )}
+                            {task.status === "Done" && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleArchive(task.id);
+                                }}
+                                className="px-3 py-1 bg-indigo-500 text-white rounded-md text-[11px] hover:bg-indigo-600 flex items-center gap-1"
+                              >
+                                <Archive size={12} /> Archive
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      ))
+                    )}
+                  </AnimatePresence>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
       )}
 

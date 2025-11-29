@@ -133,11 +133,11 @@ const Dashboard = () => {
   useEffect(() => {
     if (!user) return;
     const boardsRef = collection(db, "users", user.uid, "boards");
-    const q = query(boardsRef, orderBy("createdAt", "asc"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const boardList = snapshot.docs.map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
+    const qBoards = query(boardsRef, orderBy("createdAt", "asc"));
+    const unsubscribe = onSnapshot(qBoards, (snapshot) => {
+      const boardList = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data(),
       }));
       setBoards(boardList);
       setLoadingBoards(false);
@@ -165,7 +165,10 @@ const Dashboard = () => {
           "tasks"
         );
         const unsub = onSnapshot(tasksRef, (snap) => {
-          let tasks = snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          let tasks = snap.docs.map((docSnap) => ({
+            id: docSnap.id,
+            ...docSnap.data(),
+          }));
           allTasks = allTasks.filter((t) => t.boardId !== boardDoc.id);
           tasks = tasks.map((t) => ({ ...t, boardId: boardDoc.id }));
           allTasks.push(...tasks);
@@ -199,13 +202,13 @@ const Dashboard = () => {
   useEffect(() => {
     if (!user) return;
 
-    const q = query(
+    const qPlans = query(
       collection(db, "users", user.uid, "plannerEvents"),
       orderBy("start", "asc")
     );
 
     const unsubscribe = onSnapshot(
-      q,
+      qPlans,
       (snapshot) => {
         if (snapshot.empty) {
           setPlans([]);
@@ -227,6 +230,7 @@ const Dashboard = () => {
             description: d.description || "",
             tag: d.agenda || "General",
             location: d.where || "No location",
+            priority: d.priority || "medium",
             start,
             end,
             createdAt:
@@ -245,6 +249,7 @@ const Dashboard = () => {
             p.start.getTime() >= now.getTime() - 1000 * 60 * 60 * 24
         );
 
+        // keep them ordered, but we really only care about the first one
         setPlans(upcoming.slice(0, 5));
       },
       (err) => {
@@ -254,6 +259,44 @@ const Dashboard = () => {
 
     return () => unsubscribe();
   }, [user]);
+
+  // Compute next upcoming plan (for minimal card)
+  const nextPlan = plans.length > 0 ? plans[0] : null;
+  let nextPlanMeta = null;
+
+  if (nextPlan && nextPlan.start instanceof Date && !isNaN(nextPlan.start)) {
+    const formattedDate = nextPlan.start.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+    const formattedTime = nextPlan.start.toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+    const now = new Date();
+    const diffMs = nextPlan.start.getTime() - now.getTime();
+    let startsLabel;
+
+    if (diffMs <= 0) {
+      startsLabel = "Happening now";
+    } else {
+      const days = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+      const hours = Math.floor((diffMs / (1000 * 60 * 60)) % 24);
+      const minutes = Math.floor((diffMs / (1000 * 60)) % 60);
+
+      if (days > 0) {
+        startsLabel = `In ${days}d ${hours}h`;
+      } else if (hours > 0) {
+        startsLabel = `In ${hours}h ${minutes}m`;
+      } else {
+        startsLabel = `In ${minutes}m`;
+      }
+    }
+
+    nextPlanMeta = { formattedDate, formattedTime, startsLabel };
+  }
 
   // Add / Delete boards
   const handleAddBoard = async () => {
@@ -463,7 +506,7 @@ const Dashboard = () => {
               </div>
             </div>
 
-            {/* 🔹 Quick Actions ABOVE Upcoming Plans */}
+            {/* 🔹 Quick Actions ABOVE Next Plan */}
             <div className="flex flex-wrap gap-4 mb-8">
               <button
                 onClick={() => navigate("/summary")}
@@ -472,7 +515,7 @@ const Dashboard = () => {
                            dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100
                            transition font-medium"
               >
-                <FolderKanban size={20} /> View Task Summary
+                <FolderKanban size={20} /> View Your Tasks
               </button>
 
               <button
@@ -482,15 +525,15 @@ const Dashboard = () => {
                            dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100
                            transition font-medium"
               >
-                <Calendar size={20} /> View Planner Summary
+                <Calendar size={20} /> View Your Plans
               </button>
             </div>
 
-            {/* Upcoming Plans */}
+            {/* ⭐ Minimal Next Plan Card */}
             <div className="bg-white dark:bg-slate-800 shadow-md rounded-2xl p-6 mb-8 border border-slate-200 dark:border-slate-700 transition-colors">
-              <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
-                  Upcoming Plans
+                  Next Plan
                 </h2>
                 <button
                   onClick={() => navigate("/planner")}
@@ -500,92 +543,66 @@ const Dashboard = () => {
                 </button>
               </div>
 
-              <ul className="relative border-l border-slate-200 dark:border-slate-700 pl-6 space-y-6">
-                {plans.length === 0 ? (
-                  <p className="text-sm text-slate-500 dark:text-slate-400 ml-4">
-                    No upcoming plans found. Create one in your{" "}
-                    <span
-                      onClick={() => navigate("/planner")}
-                      className="text-indigo-600 dark:text-indigo-400 cursor-pointer hover:underline"
-                    >
-                      Planner
-                    </span>
-                    .
-                  </p>
-                ) : (
-                  plans.map((plan, index) => {
-                    const now = new Date();
-                    const diff = plan.start - now;
-                    const daysLeft = Math.ceil(diff / (1000 * 60 * 60 * 24));
-                    const progress = Math.min(
-                      100,
-                      Math.max(0, ((7 - daysLeft) / 7) * 100)
-                    );
-                    let color = "bg-green-500";
-                    if (daysLeft <= 1) color = "bg-red-500";
-                    else if (daysLeft <= 3) color = "bg-yellow-500";
-                    const countdownLabel =
-                      diff <= 0
-                        ? "Happening now"
-                        : `${daysLeft} day${daysLeft > 1 ? "s" : ""} left`;
-                    const formattedDate = plan.start.toLocaleDateString(
-                      undefined,
-                      { month: "short", day: "numeric", year: "numeric" }
-                    );
-                    const formattedTime = plan.start.toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    });
+              {!nextPlan || !nextPlanMeta ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">
+                  No upcoming plans found. Create one in your{" "}
+                  <span
+                    onClick={() => navigate("/planner")}
+                    className="text-indigo-600 dark:text-indigo-400 cursor-pointer hover:underline"
+                  >
+                    Planner
+                  </span>
+                  .
+                </p>
+              ) : (
+                <div className="max-w-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full"
+                        style={{
+                          backgroundColor:
+                            nextPlan.priority === "high"
+                              ? "#ef4444"
+                              : nextPlan.priority === "low"
+                              ? "#10b981"
+                              : "#f59e0b",
+                        }}
+                      ></span>
+                      <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                        {nextPlan.title}
+                      </h3>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                        {nextPlan.tag}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      📍 {nextPlan.location}
+                    </p>
+                    {nextPlan.description && (
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
+                        {nextPlan.description}
+                      </p>
+                    )}
 
-                    return (
-                      <motion.li
-                        key={plan.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                        className="group relative bg-white dark:bg-slate-800 rounded-xl p-4 shadow-sm hover:shadow-md border border-slate-200 dark:border-slate-700 transition-all duration-300 cursor-pointer"
-                      >
-                        <span className="absolute -left-[11px] top-5 w-5 h-5 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 ring-4 ring-white dark:ring-slate-900 group-hover:scale-110 transition-transform"></span>
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
-                          <h3 className="font-semibold text-slate-800 dark:text-slate-100 text-base mb-1 sm:mb-0 flex items-center gap-2">
-                            {plan.title}
-                            <span className="text-[11px] px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
-                              {plan.tag}
-                            </span>
-                          </h3>
-                          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                            {formattedDate} • {formattedTime}
-                          </span>
-                        </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-300 mt-1">
-                          📍 {plan.location}
-                        </p>
-                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 leading-snug">
-                          {plan.description}
-                        </p>
+                    {/* ⏳ Duration + Time Left (synced with planner) */}
+                    <PlanCountdown
+                      createdAt={nextPlan.createdAt}
+                      end={nextPlan.end}
+                    />
+                  </div>
 
-                        {/* ⏳ Duration + Time Left (synced with planner) */}
-                        <PlanCountdown
-                          createdAt={plan.createdAt}
-                          end={plan.end}
-                        />
-
-                        <div className="mt-3 flex justify-between items-center">
-                          <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
-                            {countdownLabel}
-                          </p>
-                        </div>
-                        <div className="mt-1 w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={`h-1.5 rounded-full transition-all duration-500 ${color}`}
-                            style={{ width: `${progress}%` }}
-                          ></div>
-                        </div>
-                      </motion.li>
-                    );
-                  })
-                )}
-              </ul>
+                  <div className="text-right text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                    <p className="font-medium text-slate-700 dark:text-slate-100">
+                      {nextPlanMeta.formattedDate}
+                    </p>
+                    <p>{nextPlanMeta.formattedTime}</p>
+                    <p className="mt-1 text-[11px] text-indigo-600 dark:text-indigo-300 font-semibold">
+                      {nextPlanMeta.startsLabel}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </>
         ) : (
