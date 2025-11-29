@@ -34,7 +34,7 @@ if (!SENDER_EMAIL) {
   );
 }
 
-const APP_NAME = "WorkLoon Planner";
+const APP_NAME = "Task Master";
 
 /* ==========================================================
    ⏰ Scheduled reminder function
