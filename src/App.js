@@ -23,19 +23,21 @@ import PageTransition from "./components/PageTransition";
 import Profile from "./pages/Profile";
 import Analytics from "./pages/Analytics";
 import Planner from "./pages/Planner";
-import PlannerSummary from "./pages/PlannerSummary";   // ✅ Correct import
+import PlannerSummary from "./pages/PlannerSummary";
 import GoogleCalendarTest from "./pages/GoogleCalendarTest";
 import Documents from "./pages/Documents";
 import { Toaster } from "react-hot-toast";
 import ArchiveView from "./pages/ArchiveView";
-import BoardDocuments from "./pages/BoardDocuments"; 
+import BoardDocuments from "./pages/BoardDocuments";
 import Summary from "./pages/Summary";
+import LandingPage from "./pages/LandingPage";
 
 /* ✅ Layout Wrapper — Handles Navbar/Footer visibility */
 function LayoutWrapper({ children }) {
   const location = useLocation();
 
-  const noHeaderFooterRoutes = ["/", "/register"];
+  // Hide global Navbar & Footer on landing, login, and register
+  const noHeaderFooterRoutes = ["/", "/login", "/register"];
   const noFooterRoutes = ["/dashboard"];
 
   const hideHeaderFooter = noHeaderFooterRoutes.includes(location.pathname);
@@ -63,7 +65,8 @@ function ProtectedRoute({ children }) {
   }
 
   if (!user) {
-    return <Navigate to="/" replace />;
+    // Redirect guests to login (landing page is at "/")
+    return <Navigate to="/login" replace />;
   }
 
   return children;
@@ -97,11 +100,22 @@ function App() {
         <Toaster position="top-right" />
 
         <AnimatePresence mode="wait">
-
           <Routes location={location} key={location.pathname}>
             {/* =================== PUBLIC ROUTES =================== */}
+
+            {/* Landing page */}
             <Route
               path="/"
+              element={
+                <PageTransition>
+                  <LandingPage />
+                </PageTransition>
+              }
+            />
+
+            {/* Login */}
+            <Route
+              path="/login"
               element={
                 <PageTransition>
                   <Login />
@@ -109,6 +123,7 @@ function App() {
               }
             />
 
+            {/* Register */}
             <Route
               path="/register"
               element={
@@ -118,13 +133,16 @@ function App() {
               }
             />
 
-            {/* =================== PROTECTED ROUTES =================== */}
+            {/* =================== PROTECTED / APP ROUTES =================== */}
+
             <Route
               path="/dashboard"
               element={
-                <PageTransition>
-                  <Dashboard />
-                </PageTransition>
+                <ProtectedRoute>
+                  <PageTransition>
+                    <Dashboard />
+                  </PageTransition>
+                </ProtectedRoute>
               }
             />
 
@@ -138,8 +156,18 @@ function App() {
                 </ProtectedRoute>
               }
             />
-                      <Route path="/board/:id/documents" element={<BoardDocuments />} />
 
+            {/* If you still want BoardDocuments separate, keep it here */}
+            <Route
+              path="/board/:id/board-documents"
+              element={
+                <ProtectedRoute>
+                  <PageTransition>
+                    <BoardDocuments />
+                  </PageTransition>
+                </ProtectedRoute>
+              }
+            />
 
             <Route
               path="/archive/:id"
@@ -152,6 +180,7 @@ function App() {
               }
             />
 
+            {/* Documents for a board */}
             <Route
               path="/board/:id/documents"
               element={
@@ -191,26 +220,22 @@ function App() {
               }
             />
 
-            {/* ✅ NEW: Planner Summary page */}
             <Route
               path="/planner-summary"
               element={
-          
-                  <PageTransition>
-                    <PlannerSummary />
-                  </PageTransition>
-                
+                <PageTransition>
+                  <PlannerSummary />
+                </PageTransition>
               }
             />
 
-        
             <Route
               path="/summary"
-              element={ <PageTransition>
-                    <Summary />
-                  </PageTransition>
-                }
-              
+              element={
+                <PageTransition>
+                  <Summary />
+                </PageTransition>
+              }
             />
 
             <Route path="/calendar-test" element={<GoogleCalendarTest />} />
