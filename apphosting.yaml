@@ -1,16 +1,8 @@
- # Runtime configuration
+  # Runtime configuration
 runConfig:
   runtime: nodejs20
-  
-  cpu: 1
-  memory: 1GiB
-  
-  maxInstances: 100
-  
+ 
   minInstances: 0
-  
-  # Concurrency - number of requests per instance
-  concurrency: 80
 
 # Build configuration
 buildConfig:
