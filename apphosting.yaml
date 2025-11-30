@@ -1,8 +1,12 @@
 # Runtime configuration
 runConfig:
+
   CPU: 1
+
   memory: 1Gib
- 
+  
+  maxInstances: 10
+
   minInstances: 0
 
 # Build configuration
