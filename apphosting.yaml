@@ -1,83 +1,73 @@
 # Runtime configuration
 runConfig:
-
-  CPU: 1
-
-  memory: 1Gib
-  
+  cpu: 1
+  memoryMiB: 1024
   maxInstances: 10
-
   minInstances: 0
 
-# Build configuration
-buildConfig:
-  # Build commands to run
-  commands:
-    # Install dependencies
-    - npm install
-    
-    # Build the Next.js application (includes type checking)
-    - npm start
+# Custom build/run commands (optional; only if you really need them)
+# scripts:
+#   buildCommand: npm run build
+#   runCommand: npm start
 
-  # Environment variables available during build
-  env:
-    - variable: NODE_ENV
-      value: production
+# Environment variables and secrets
+env:
+  - variable: NODE_ENV
+    value: production
+    availability:
+      - BUILD
+      - RUNTIME
 
-    - variable: REACT_APP_GEMINI_API_KEY
-      secret: REACT_APP_GEMINI_API_KEY
+  - variable: REACT_APP_GEMINI_API_KEY
+    secret: REACT_APP_GEMINI_API_KEY
+    availability:
+      - BUILD
+      - RUNTIME
 
-    - variable: REACT_APP_FIREBASE_API_KEY
-      secret: REACT_APP_FIREBASE_API_KEY
+  - variable: REACT_APP_FIREBASE_API_KEY
+    secret: REACT_APP_FIREBASE_API_KEY
+    availability:
+      - BUILD
+      - RUNTIME
 
-    - variable: REACT_APP_FIREBASE_AUTH_DOMAIN
-      secret: REACT_APP_FIREBASE_AUTH_DOMAIN
+  - variable: REACT_APP_FIREBASE_AUTH_DOMAIN
+    secret: REACT_APP_FIREBASE_AUTH_DOMAIN
+    availability:
+      - BUILD
+      - RUNTIME
 
-    - variable: REACT_APP_FIREBASE_PROJECT_ID
-      secret: REACT_APP_FIREBASE_PROJECT_ID
+  - variable: REACT_APP_FIREBASE_PROJECT_ID
+    secret: REACT_APP_FIREBASE_PROJECT_ID
+    availability:
+      - BUILD
+      - RUNTIME
 
-    - variable: REACT_APP_FIREBASE_STORAGE_BUCKET
-      secret: REACT_APP_FIREBASE_STORAGE_BUCKET
+  - variable: REACT_APP_FIREBASE_STORAGE_BUCKET
+    secret: REACT_APP_FIREBASE_STORAGE_BUCKET
+    availability:
+      - BUILD
+      - RUNTIME
 
-    - variable: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
-      secret: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+  - variable: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+    secret: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+    availability:
+      - BUILD
+      - RUNTIME
 
-    - variable: REACT_APP_FIREBASE_APP_ID
-      secret: REACT_APP_FIREBASE_APP_ID
+  - variable: REACT_APP_FIREBASE_APP_ID
+    secret: REACT_APP_FIREBASE_APP_ID
+    availability:
+      - BUILD
+      - RUNTIME
 
-    - variable: SENDGRID_KEY
-      secret: SENDGRID_KEY
+  - variable: SENDGRID_KEY
+    secret: SENDGRID_KEY
+    availability:
+      - BUILD
+      - RUNTIME
 
-    - variable: SENDGRID_FROM
-      secret: SENDGRID_FROM
-      
-  env:
-    - variable: NODE_ENV
-      value: production
-
-    - variable: REACT_APP_GEMINI_API_KEY
-      secret: REACT_APP_GEMINI_API_KEY
-
-    - variable: REACT_APP_FIREBASE_API_KEY
-      secret: REACT_APP_FIREBASE_API_KEY
-
-    - variable: REACT_APP_FIREBASE_AUTH_DOMAIN
-      secret: REACT_APP_FIREBASE_AUTH_DOMAIN
-
-    - variable: REACT_APP_FIREBASE_PROJECT_ID
-      secret: REACT_APP_FIREBASE_PROJECT_ID
-
-    - variable: REACT_APP_FIREBASE_STORAGE_BUCKET
-      secret: REACT_APP_FIREBASE_STORAGE_BUCKET
-
-    - variable: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
-      secret: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
-
-    - variable: REACT_APP_FIREBASE_APP_ID
-      secret: REACT_APP_FIREBASE_APP_ID
-
-    - variable: SENDGRID_KEY
-      secret: SENDGRID_KEY
-
-    - variable: SENDGRID_FROM
-      secret: SENDGRID_FROM
+  - variable: SENDGRID_FROM
+    secret: SENDGRID_FROM
+    availability:
+      - BUILD
+      - RUNTIME
