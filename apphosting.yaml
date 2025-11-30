@@ -1,8 +1,8 @@
 # Runtime configuration
 runConfig:
-  cpu: 1
+  cpu: 2
   memoryMiB: 1024
-  maxInstances: 10
+  maxInstances: 100
   minInstances: 0
 
 # Custom build/run commands (optional; only if you really need them)
