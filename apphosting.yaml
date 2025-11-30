@@ -1,0 +1,86 @@
+ # Runtime configuration
+runConfig:
+  runtime: nodejs20
+  
+  cpu: 1
+  memory: 1GiB
+  
+  maxInstances: 100
+  
+  minInstances: 0
+  
+  # Concurrency - number of requests per instance
+  concurrency: 80
+
+# Build configuration
+buildConfig:
+  # Build commands to run
+  commands:
+    # Install dependencies
+    - npm ci
+    
+    # Build the Next.js application (includes type checking)
+    - npm run build
+
+  # Environment variables available during build
+  env:
+    - variable: NODE_ENV
+      value: production
+
+    - variable: REACT_APP_GEMINI_API_KEY
+      secret: REACT_APP_GEMINI_API_KEY
+
+    - variable: REACT_APP_FIREBASE_API_KEY
+      secret: REACT_APP_FIREBASE_API_KEY
+
+    - variable: REACT_APP_FIREBASE_AUTH_DOMAIN
+      secret: REACT_APP_FIREBASE_AUTH_DOMAIN
+
+    - variable: REACT_APP_FIREBASE_PROJECT_ID
+      secret: REACT_APP_FIREBASE_PROJECT_ID
+
+    - variable: REACT_APP_FIREBASE_STORAGE_BUCKET
+      secret: REACT_APP_FIREBASE_STORAGE_BUCKET
+
+    - variable: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+      secret: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+
+    - variable: REACT_APP_FIREBASE_APP_ID
+      secret: REACT_APP_FIREBASE_APP_ID
+
+    - variable: SENDGRID_KEY
+      secret: SENDGRID_KEY
+
+    - variable: SENDGRID_FROM
+      secret: SENDGRID_FROM
+      
+  env:
+    - variable: NODE_ENV
+      value: production
+
+    - variable: REACT_APP_GEMINI_API_KEY
+      secret: REACT_APP_GEMINI_API_KEY
+
+    - variable: REACT_APP_FIREBASE_API_KEY
+      secret: REACT_APP_FIREBASE_API_KEY
+
+    - variable: REACT_APP_FIREBASE_AUTH_DOMAIN
+      secret: REACT_APP_FIREBASE_AUTH_DOMAIN
+
+    - variable: REACT_APP_FIREBASE_PROJECT_ID
+      secret: REACT_APP_FIREBASE_PROJECT_ID
+
+    - variable: REACT_APP_FIREBASE_STORAGE_BUCKET
+      secret: REACT_APP_FIREBASE_STORAGE_BUCKET
+
+    - variable: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+      secret: REACT_APP_FIREBASE_MESSAGING_SENDER_ID
+
+    - variable: REACT_APP_FIREBASE_APP_ID
+      secret: REACT_APP_FIREBASE_APP_ID
+
+    - variable: SENDGRID_KEY
+      secret: SENDGRID_KEY
+
+    - variable: SENDGRID_FROM
+      secret: SENDGRID_FROM

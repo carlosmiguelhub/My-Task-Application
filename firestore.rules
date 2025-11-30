@@ -1,0 +1,30 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 🔒 Each user's private data (planner)
+    match /users/{userId}/plannerEvents/{eventId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // 🔒 Each user profile (you can safely allow this)
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // ✅ Public or team-wide collections (e.g., boards, dashboard, projects)
+    // You can adjust these conditions later if you want to restrict by owner.
+    match /boards/{boardId} {
+      allow read, write: if request.auth != null;
+    }
+
+    match /dashboards/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // OPTIONAL: Any other collection your app needs
+    match /{document=**} {
+      allow read, write: if request.auth != null && request.time < timestamp.date(2026, 1, 1);
+    }
+  }
+}
