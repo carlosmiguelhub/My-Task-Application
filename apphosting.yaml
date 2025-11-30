@@ -1,6 +1,9 @@
   # Runtime configuration
 runConfig:
   runtime: nodejs20
+
+  CPU: 1
+  memory: 1Gib
  
   minInstances: 0
 
