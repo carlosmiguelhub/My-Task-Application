@@ -1,7 +1,5 @@
-  # Runtime configuration
+# Runtime configuration
 runConfig:
-  runtime: nodejs20
-
   CPU: 1
   memory: 1Gib
  
@@ -12,10 +10,10 @@ buildConfig:
   # Build commands to run
   commands:
     # Install dependencies
-    - npm ci
+    - npm install
     
     # Build the Next.js application (includes type checking)
-    - npm run build
+    - npm start
 
   # Environment variables available during build
   env:
