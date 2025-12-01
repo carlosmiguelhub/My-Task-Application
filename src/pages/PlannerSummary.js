@@ -41,7 +41,7 @@ const formatDiff = (ms) => {
   return `${days}d ${hours}h ${minutes}m ${seconds}s`;
 };
 
-const PlanDurationCountdown = ({ createdAt, end }) => {
+const PlanDurationCountdown = ({ createdAt, end, completed }) => {
   const [timeLeft, setTimeLeft] = useState("");
   const [duration, setDuration] = useState("");
 
@@ -55,9 +55,24 @@ const PlanDurationCountdown = ({ createdAt, end }) => {
         : new Date(createdAt)
       : null;
 
+    const endMs = endDate.getTime();
+
+    // Static duration (created → due)
+    if (createdDate) {
+      const durMs = endMs - createdDate.getTime();
+      setDuration(formatDiff(durMs));
+    } else {
+      setDuration("");
+    }
+
+    // If already completed, do NOT run countdown
+    if (completed) {
+      setTimeLeft("");
+      return;
+    }
+
     const tick = () => {
       const now = Date.now();
-      const endMs = endDate.getTime();
       const remaining = endMs - now;
 
       if (remaining <= 0) {
@@ -65,19 +80,12 @@ const PlanDurationCountdown = ({ createdAt, end }) => {
       } else {
         setTimeLeft(formatDiff(remaining));
       }
-
-      if (createdDate) {
-        const durMs = endMs - createdDate.getTime();
-        setDuration(formatDiff(durMs));
-      } else {
-        setDuration("");
-      }
     };
 
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [createdAt, end]);
+  }, [createdAt, end, completed]);
 
   if (!end) return null;
 
@@ -88,7 +96,14 @@ const PlanDurationCountdown = ({ createdAt, end }) => {
         {duration || "—"}
       </div>
       <div>
-        <span className="font-semibold">Time left:</span> {timeLeft}
+        <span className="font-semibold">Time left:</span>{" "}
+        {completed ? (
+          <span className="italic text-slate-400 dark:text-slate-500">
+            Plan completed
+          </span>
+        ) : (
+          timeLeft
+        )}
       </div>
     </div>
   );
@@ -99,7 +114,7 @@ export default function PlannerSummary() {
   const [authReady, setAuthReady] = useState(false);
 
   const [events, setEvents] = useState([]); // active plannerEvents
-  const [historyEvents, setHistoryEvents] = useState([]); // deleted → history
+  const [historyEvents, setHistoryEvents] = useState([]); // deleted/completed → history
   const [viewMode, setViewMode] = useState("summary"); // "summary" | "history"
 
   const [filter, setFilter] = useState("all"); // all | upcoming | past | high | medium | low
@@ -108,8 +123,7 @@ export default function PlannerSummary() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // which cards are expanded (IDs)
-  const [expandedIds, setExpandedIds] = useState([]);
+  const [expandedIds, setExpandedIds] = useState([]); // expanded cards
 
   // 🎉 celebration state
   const [celebrateEvent, setCelebrateEvent] = useState(null);
@@ -197,7 +211,7 @@ export default function PlannerSummary() {
     }
   }, [user]);
 
-  // 🔄 Load plannerHistory (deleted plans)
+  // 🔄 Load plannerHistory (deleted + completed plans)
   useEffect(() => {
     if (!user) return;
 
@@ -235,6 +249,12 @@ export default function PlannerSummary() {
                 : raw.deletedAt
                 ? new Date(raw.deletedAt)
                 : null,
+              completedAt: raw.completedAt?.toDate
+                ? raw.completedAt.toDate()
+                : raw.completedAt
+                ? new Date(raw.completedAt)
+                : null,
+              completed: !!raw.completed,
             };
           });
           setHistoryEvents(data);
@@ -298,7 +318,7 @@ export default function PlannerSummary() {
     return `${hours} hr${hours > 1 ? "s" : ""} ${remMins} min`;
   };
 
-  // 🗑 Delete active plan → move to history
+  // 🗑 Delete active plan → move to history (reason: deleted)
   const handleDelete = async (event) => {
     if (!user || !event) return;
     const { id, title } = event;
@@ -316,6 +336,7 @@ export default function PlannerSummary() {
         ...rest,
         originalId: id,
         deletedAt: serverTimestamp(),
+        movedReason: "deleted",
       });
 
       await deleteDoc(doc(db, "users", user.uid, "plannerEvents", id));
@@ -330,24 +351,29 @@ export default function PlannerSummary() {
     }
   };
 
-  // ✅ Mark plan as completed
+  // ✅ Mark plan as completed → move to history (reason: completed)
   const handleComplete = async (event) => {
     if (!user || !event) return;
-    try {
-      await setDoc(
-        doc(db, "users", user.uid, "plannerEvents", event.id),
-        {
-          completed: true,
-          completedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
+    const { id } = event;
 
-      // close modal if open
+    try {
+      const historyRef = collection(db, "users", user.uid, "plannerHistory");
+      const { id: _ignoreId, ...rest } = event;
+
+      await addDoc(historyRef, {
+        ...rest,
+        originalId: id,
+        completed: true,
+        completedAt: serverTimestamp(),
+        deletedAt: serverTimestamp(), // use as "movedAt" for ordering in history
+        movedReason: "completed",
+      });
+
+      await deleteDoc(doc(db, "users", user.uid, "plannerEvents", id));
+
       setSelectedEvent(null);
       setIsModalOpen(false);
 
-      // open celebration popup
       setCelebrateEvent(event);
     } catch (e) {
       console.error("[Summary complete] error:", e);
@@ -444,7 +470,7 @@ export default function PlannerSummary() {
             <p className="text-sm text-slate-500 dark:text-slate-400">
               {viewMode === "summary"
                 ? "Review and track all active plans in your weekly planner."
-                : "View plans you've previously deleted (kept for reference)."}
+                : "View plans you've previously deleted or completed (kept for reference)."}
             </p>
           </div>
         </div>
@@ -612,7 +638,9 @@ export default function PlannerSummary() {
                     </p>
                     {viewMode === "history" && event.deletedAt && (
                       <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">
-                        Deleted on{" "}
+                        {event.movedReason === "completed"
+                          ? "Completed on "
+                          : "Deleted on "}
                         {format(event.deletedAt, "EEE, MMM d yyyy • h:mm a")}
                       </p>
                     )}
@@ -674,10 +702,11 @@ export default function PlannerSummary() {
                     </div>
 
                     <div className="md:text-right text-xs md:text-sm text-slate-500 dark:text-slate-400 min-w-[220px] flex flex-col items-start md:items-end gap-1">
-                      {/* ⏳ Creation → due duration + live time left */}
+                      {/* ⏳ Creation → due duration + live time left / completed label */}
                       <PlanDurationCountdown
                         createdAt={event.createdAt}
                         end={event.end}
+                        completed={isCompleted}
                       />
 
                       {viewMode === "summary" && (
@@ -756,7 +785,11 @@ export default function PlannerSummary() {
               )}
               {selectedEvent.deletedAt && viewMode === "history" && (
                 <p>
-                  <span className="font-semibold">Deleted on:</span>{" "}
+                  <span className="font-semibold">
+                    {selectedEvent.movedReason === "completed"
+                      ? "Completed on:"
+                      : "Deleted on:"}
+                  </span>{" "}
                   {format(selectedEvent.deletedAt, "EEE, MMM d yyyy • h:mm a")}
                 </p>
               )}
@@ -779,6 +812,7 @@ export default function PlannerSummary() {
               <PlanDurationCountdown
                 createdAt={selectedEvent.createdAt}
                 end={selectedEvent.end}
+                completed={!!selectedEvent.completed}
               />
             </div>
 

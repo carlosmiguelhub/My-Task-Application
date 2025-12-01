@@ -35,6 +35,8 @@ if (!SENDER_EMAIL) {
 }
 
 const APP_NAME = "Task Master";
+/* ⭐ TIMEZONE: used for all email date formatting */
+const APP_TIME_ZONE = "Asia/Manila";
 
 /* ==========================================================
    🎨 EMAIL TEMPLATE HELPERS (shared by tasks & planner)
@@ -355,7 +357,9 @@ export const sendDeadlineReminders = onSchedule(
           ? task.dueDate.toDate()
           : new Date(task.dueDate);
 
+        /* ✅ TIMEZONE FIX HERE */
         const formattedTime = dueDate.toLocaleString("en-PH", {
+          timeZone: APP_TIME_ZONE,
           hour: "2-digit",
           minute: "2-digit",
           day: "numeric",
@@ -578,7 +582,9 @@ export const sendUpcomingPlanReminders = onSchedule(
         const agenda = plan.agenda || "";
         const where = plan.where || "";
 
+        /* ✅ TIMEZONE FIX HERE */
         const formattedStart = startDate.toLocaleString("en-PH", {
+          timeZone: APP_TIME_ZONE,
           weekday: "short",
           month: "short",
           day: "numeric",
