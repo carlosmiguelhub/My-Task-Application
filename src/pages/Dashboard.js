@@ -15,6 +15,7 @@ import {
   Clock,
   FolderKanban,
   TrendingUp,
+  HelpCircle,
 } from "lucide-react";
 import { useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
@@ -121,6 +122,69 @@ const Dashboard = () => {
 
   // ✅ Upcoming planner events
   const [plans, setPlans] = useState([]);
+  // 👉 index for the next-plan carousel
+  const [currentPlanIndex, setCurrentPlanIndex] = useState(0);
+
+  // ✅ Guide overlay
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [guideStep, setGuideStep] = useState(0);
+
+  const guideSteps = [
+    {
+      title: "Welcome to Task Master",
+      body: "This dashboard gives you a quick overview of your work: tasks, boards, and upcoming plans.",
+      tip: "Start with Boards to organize different projects or areas of your life.",
+    },
+    {
+      title: "Boards",
+      body: "Boards let you group related tasks together (e.g., Work, Personal, School).",
+      tip: "Go to the Boards page and click 'Create New Board' to make your first board.",
+      actionLabel: "Go to Boards",
+      action: () => setActivePage("boards"),
+    },
+    {
+      title: "Tasks inside Boards",
+      body: "Each board contains tasks that you can move between statuses like Pending, In Progress, and Done.",
+      tip: "Open a board and use the add task button to start filling it with work items.",
+    },
+    {
+      title: "Planner & Plans",
+      body: "The Planner is your calendar-style view where you can schedule plans, events, and deadlines.",
+      tip: "Use it for time-bound items like meetings, exams, or due dates.",
+      actionLabel: "Open Planner",
+      action: () => navigate("/planner"),
+    },
+    {
+      title: "Next Plan & Countdown",
+      body: "This card shows your nearest upcoming plan and a live countdown until it happens.",
+      tip: "Create plans in the Planner to see them appear here and keep track of important dates.",
+    },
+    {
+      title: "Analytics & Progress",
+      body: "Analytics helps you see how many tasks are done, in progress, or pending.",
+      tip: "Use this to understand your productivity and where you’re getting stuck.",
+      actionLabel: "View Analytics",
+      action: () => navigate("/analytics"),
+    },
+    {
+      title: "You’re ready to go!",
+      body: "Use Boards to organize, Tasks to execute, Planner to schedule, and Analytics to track progress.",
+      tip: "You can reopen this guide anytime using the Guide button.",
+    },
+  ];
+
+  const handleGuideNext = () => {
+    setGuideStep((prev) => Math.min(prev + 1, guideSteps.length - 1));
+  };
+
+  const handleGuidePrev = () => {
+    setGuideStep((prev) => Math.max(prev - 1, 0));
+  };
+
+  const handleGuideClose = () => {
+    setIsGuideOpen(false);
+    setGuideStep(0);
+  };
 
   // Responsive sidebar
   useEffect(() => {
@@ -212,6 +276,7 @@ const Dashboard = () => {
       (snapshot) => {
         if (snapshot.empty) {
           setPlans([]);
+          setCurrentPlanIndex(0);
           return;
         }
 
@@ -249,8 +314,9 @@ const Dashboard = () => {
             p.start.getTime() >= now.getTime() - 1000 * 60 * 60 * 24
         );
 
-        // keep them ordered, but we really only care about the first one
+        // keep them ordered, but we really only care about the first ones
         setPlans(upcoming.slice(0, 5));
+        setCurrentPlanIndex(0); // 🔄 reset to first whenever list changes
       },
       (err) => {
         console.error("❌ Firestore listener error:", err);
@@ -260,23 +326,28 @@ const Dashboard = () => {
     return () => unsubscribe();
   }, [user]);
 
-  // Compute next upcoming plan (for minimal card)
-  const nextPlan = plans.length > 0 ? plans[0] : null;
-  let nextPlanMeta = null;
+  // 🔁 Current plan for the mini carousel
+  const hasPlans = plans.length > 0;
+  const currentPlan =
+    hasPlans && currentPlanIndex < plans.length
+      ? plans[currentPlanIndex]
+      : null;
 
-  if (nextPlan && nextPlan.start instanceof Date && !isNaN(nextPlan.start)) {
-    const formattedDate = nextPlan.start.toLocaleDateString(undefined, {
+  const getPlanMeta = (plan) => {
+    if (!plan || !(plan.start instanceof Date) || isNaN(plan.start)) return null;
+
+    const formattedDate = plan.start.toLocaleDateString(undefined, {
       month: "short",
       day: "numeric",
       year: "numeric",
     });
-    const formattedTime = nextPlan.start.toLocaleTimeString([], {
+    const formattedTime = plan.start.toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
 
     const now = new Date();
-    const diffMs = nextPlan.start.getTime() - now.getTime();
+    const diffMs = plan.start.getTime() - now.getTime();
     let startsLabel;
 
     if (diffMs <= 0) {
@@ -295,8 +366,21 @@ const Dashboard = () => {
       }
     }
 
-    nextPlanMeta = { formattedDate, formattedTime, startsLabel };
-  }
+    return { formattedDate, formattedTime, startsLabel };
+  };
+
+  const currentPlanMeta = getPlanMeta(currentPlan);
+
+  // 🔼 Carousel controls
+  const handlePrevPlan = () => {
+    setCurrentPlanIndex((prev) => Math.max(0, prev - 1));
+  };
+
+  const handleNextPlan = () => {
+    setCurrentPlanIndex((prev) =>
+      Math.min(plans.length - 1, prev + 1)
+    );
+  };
 
   // Add / Delete boards
   const handleAddBoard = async () => {
@@ -451,12 +535,22 @@ const Dashboard = () => {
         {/* ===== Home Page ===== */}
         {activePage === "home" ? (
           <>
-            <h1 className="text-3xl font-semibold text-slate-800 dark:text-slate-100 mb-8">
-              Welcome back,{" "}
-              <span className="text-indigo-600">
-                {user?.displayName || "User"} 👋
-              </span>
-            </h1>
+            {/* Header + Guide Button */}
+            <div className="flex items-center justify-between mb-8">
+              <h1 className="text-3xl font-semibold text-slate-800 dark:text-slate-100">
+                Welcome back,{" "}
+                <span className="text-indigo-600">
+                  {user?.displayName || "User"} 👋
+                </span>
+              </h1>
+              <button
+                onClick={() => setIsGuideOpen(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-sm font-medium text-slate-700 dark:text-slate-100 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+              >
+                <HelpCircle size={18} className="text-indigo-500" />
+                <span>Guide</span>
+              </button>
+            </div>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -529,12 +623,42 @@ const Dashboard = () => {
               </button>
             </div>
 
-            {/* ⭐ Minimal Next Plan Card */}
+            {/* ⭐ Next Plan Carousel Card */}
             <div className="bg-white dark:bg-slate-800 shadow-md rounded-2xl p-6 mb-8 border border-slate-200 dark:border-slate-700 transition-colors">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
-                  Next Plan
-                </h2>
+                <div className="flex items-center gap-3">
+                  <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+                    Next Plan
+                  </h2>
+
+                  {/* 🔁 Plan carousel controls */}
+                  {hasPlans && (
+                    <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                      <button
+                        onClick={handlePrevPlan}
+                        disabled={currentPlanIndex === 0}
+                        className={`p-1 rounded-full border border-slate-300 dark:border-slate-600 
+                                    hover:bg-slate-100 dark:hover:bg-slate-800 transition 
+                                    disabled:opacity-40 disabled:cursor-not-allowed`}
+                      >
+                        <ChevronLeft size={14} />
+                      </button>
+                      <span className="font-medium">
+                        {currentPlanIndex + 1} / {plans.length}
+                      </span>
+                      <button
+                        onClick={handleNextPlan}
+                        disabled={currentPlanIndex === plans.length - 1}
+                        className={`p-1 rounded-full border border-slate-300 dark:border-slate-600 
+                                    hover:bg-slate-100 dark:hover:bg-slate-800 transition 
+                                    disabled:opacity-40 disabled:cursor-not-allowed`}
+                      >
+                        <ChevronRight size={14} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 <button
                   onClick={() => navigate("/planner")}
                   className="text-sm px-4 py-2 rounded-md bg-indigo-50 dark:bg-slate-900 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-slate-800 transition font-medium"
@@ -543,7 +667,7 @@ const Dashboard = () => {
                 </button>
               </div>
 
-              {!nextPlan || !nextPlanMeta ? (
+              {!currentPlan || !currentPlanMeta ? (
                 <p className="text-sm text-slate-500 dark:text-slate-400">
                   No upcoming plans found. Create one in your{" "}
                   <span
@@ -562,43 +686,43 @@ const Dashboard = () => {
                         className="w-2.5 h-2.5 rounded-full"
                         style={{
                           backgroundColor:
-                            nextPlan.priority === "high"
+                            currentPlan.priority === "high"
                               ? "#ef4444"
-                              : nextPlan.priority === "low"
+                              : currentPlan.priority === "low"
                               ? "#10b981"
                               : "#f59e0b",
                         }}
                       ></span>
                       <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
-                        {nextPlan.title}
+                        {currentPlan.title}
                       </h3>
                       <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
-                        {nextPlan.tag}
+                        {currentPlan.tag}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                      📍 {nextPlan.location}
+                      📍 {currentPlan.location}
                     </p>
-                    {nextPlan.description && (
+                    {currentPlan.description && (
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400 line-clamp-2">
-                        {nextPlan.description}
+                        {currentPlan.description}
                       </p>
                     )}
 
                     {/* ⏳ Duration + Time Left (synced with planner) */}
                     <PlanCountdown
-                      createdAt={nextPlan.createdAt}
-                      end={nextPlan.end}
+                      createdAt={currentPlan.createdAt}
+                      end={currentPlan.end}
                     />
                   </div>
 
                   <div className="text-right text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
                     <p className="font-medium text-slate-700 dark:text-slate-100">
-                      {nextPlanMeta.formattedDate}
+                      {currentPlanMeta.formattedDate}
                     </p>
-                    <p>{nextPlanMeta.formattedTime}</p>
+                    <p>{currentPlanMeta.formattedTime}</p>
                     <p className="mt-1 text-[11px] text-indigo-600 dark:text-indigo-300 font-semibold">
-                      {nextPlanMeta.startsLabel}
+                      {currentPlanMeta.startsLabel}
                     </p>
                   </div>
                 </div>
@@ -693,6 +817,79 @@ const Dashboard = () => {
               >
                 Create
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ===== Guide Overlay ===== */}
+        {isGuideOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 w-full max-w-md relative border border-slate-200 dark:border-slate-700">
+              <button
+                onClick={handleGuideClose}
+                className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X size={18} />
+              </button>
+
+              <div className="mb-4 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
+                Quick Guide
+              </div>
+
+              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">
+                {guideSteps[guideStep].title}
+              </h2>
+              <p className="text-sm text-slate-600 dark:text-slate-300 mb-3">
+                {guideSteps[guideStep].body}
+              </p>
+              {guideSteps[guideStep].tip && (
+                <div className="text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-200 rounded-lg px-3 py-2 mb-4 border border-indigo-100 dark:border-indigo-900/60">
+                  💡 {guideSteps[guideStep].tip}
+                </div>
+              )}
+
+              {guideSteps[guideStep].action && (
+                <button
+                  onClick={() => {
+                    guideSteps[guideStep].action();
+                    setIsGuideOpen(false);
+                    setGuideStep(0);
+                  }}
+                  className="mb-4 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-300 hover:underline"
+                >
+                  {guideSteps[guideStep].actionLabel} →
+                </button>
+              )}
+
+              <div className="flex items-center justify-between mt-2">
+                <div className="text-xs text-slate-500 dark:text-slate-400">
+                  Step {guideStep + 1} of {guideSteps.length}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleGuidePrev}
+                    disabled={guideStep === 0}
+                    className="text-xs px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Back
+                  </button>
+                  {guideStep === guideSteps.length - 1 ? (
+                    <button
+                      onClick={handleGuideClose}
+                      className="text-xs px-3 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+                    >
+                      Finish
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleGuideNext}
+                      className="text-xs px-3 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+                    >
+                      Next
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}

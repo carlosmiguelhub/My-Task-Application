@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import {
   Calendar as RBCalendar,
   momentLocalizer,
@@ -10,7 +10,14 @@ import { format } from "date-fns";
 import "react-big-calendar/lib/css/react-big-calendar.css";
 import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, CalendarDays, Trash2, Save, StickyNote } from "lucide-react";
+import {
+  X,
+  CalendarDays,
+  Trash2,
+  Save,
+  StickyNote,
+  AlertCircle,
+} from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 // 🔥 Firebase
@@ -112,6 +119,12 @@ const CountdownTimer = ({ createdAt, dueDate, compact = false }) => {
   );
 };
 
+// 🔍 Helper: only allow dates starting tomorrow and up
+const isTodayOrPast = (date) => {
+  if (!date) return false;
+  return moment(date).isSameOrBefore(moment(), "day");
+};
+
 export default function PlannerWeekly() {
   const [user, setUser] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -142,6 +155,25 @@ export default function PlannerWeekly() {
 
   const apiKey = process.env.REACT_APP_GEMINI_API_KEY;
 
+  // 🔔 Toast / error UI
+  const [toast, setToast] = useState(null);
+  const toastTimeoutRef = useRef(null);
+
+  const showError = (title, message) => {
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    setToast({
+      id: Date.now(),
+      type: "error",
+      title,
+      message,
+    });
+    toastTimeoutRef.current = setTimeout(() => {
+      setToast(null);
+    }, 5000);
+  };
+
   // 👤 Track logged-in user + ensure /users/{uid} exists
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (u) => {
@@ -160,7 +192,7 @@ export default function PlannerWeekly() {
         }
       } catch (e) {
         console.error("[AUTH] setDoc error:", e);
-        alert("Auth init failed: " + (e?.message || e));
+        showError("Auth error", e?.message || "Auth init failed.");
       } finally {
         setAuthReady(true);
       }
@@ -171,7 +203,7 @@ export default function PlannerWeekly() {
   // 🧠 AI NOTE GENERATOR
   const generateNoteForEvent = async (event) => {
     if (!apiKey) {
-      alert("❌ Missing Gemini API key in .env");
+      showError("AI unavailable", "Missing Gemini API key in your .env file.");
       return;
     }
     try {
@@ -210,7 +242,7 @@ Make it friendly, actionable, and around 2–3 sentences.`;
         "Could not generate a note.";
 
       setNewEvent((prev) => ({ ...prev, note: aiText }));
-      alert("✨ AI Note generated successfully!");
+      showError("AI Note generated", "Your AI note has been added.");
 
       if (editingEvent?.id && user) {
         const docRef = doc(
@@ -224,7 +256,7 @@ Make it friendly, actionable, and around 2–3 sentences.`;
       }
     } catch (err) {
       console.error("AI note generation failed:", err);
-      alert("❌ AI note generation failed. " + (err?.message || ""));
+      showError("AI error", err?.message || "AI note generation failed.");
     }
   };
 
@@ -270,13 +302,16 @@ Make it friendly, actionable, and around 2–3 sentences.`;
         },
         (err) => {
           console.error("[onSnapshot] error:", err);
-          alert("Realtime load failed: " + (err?.message || ""));
+          showError(
+            "Realtime sync error",
+            err?.message || "Unable to load your planner in realtime."
+          );
         }
       );
       return () => unsubscribe();
     } catch (e) {
       console.error("[useEffect load] error:", e);
-      alert("Load failed: " + (e?.message || ""));
+      showError("Load error", e?.message || "Unable to load your planner.");
     }
   }, [user]);
 
@@ -301,12 +336,36 @@ Make it friendly, actionable, and around 2–3 sentences.`;
   // ✅ ADD NEW EVENT  (🔗 users/{uid}/plannerEvents)
   const handleAddEvent = async () => {
     try {
-      if (!user) throw new Error("You must be logged in.");
-      if (!newEvent.title.trim() || !selectedSlot)
-        throw new Error("Title and time are required.");
+      if (!user) {
+        showError("Sign in required", "Please sign in to add a new plan.");
+        return;
+      }
+      if (!newEvent.title.trim() || !selectedSlot) {
+        showError(
+          "Missing details",
+          "Title and time are required to create a plan."
+        );
+        return;
+      }
 
       const { start, end } = selectedSlot;
-      if (overlaps(start, end)) throw new Error("Time range unavailable!");
+
+      // 🚫 Prevent today or past
+      if (isTodayOrPast(start)) {
+        showError(
+          "Invalid date",
+          "You can only create plans starting from tomorrow and beyond."
+        );
+        return;
+      }
+
+      if (overlaps(start, end)) {
+        showError(
+          "Time unavailable",
+          "This time range already has an existing plan."
+        );
+        return;
+      }
 
       const color = getColorForDate(start, newEvent.priority);
       const item = {
@@ -326,17 +385,31 @@ Make it friendly, actionable, and around 2–3 sentences.`;
       setIsModalOpen(false);
     } catch (err) {
       console.error("[ADD] failed:", err);
-      alert("Add failed: " + (err?.message || ""));
+      showError("Add failed", err?.message || "Unable to create this plan.");
     }
   };
 
   // ✅ SELECT EMPTY SLOT
   const handleSelectSlot = ({ start, end }) => {
     console.log("[SELECT SLOT] start/end:", start, end);
-    if (overlaps(start, end)) {
-      alert("This time slot is already occupied!");
+
+    // 🚫 Block selection for today or past
+    if (isTodayOrPast(start)) {
+      showError(
+        "Date not allowed",
+        "Planning is only available for future dates (starting tomorrow)."
+      );
       return;
     }
+
+    if (overlaps(start, end)) {
+      showError(
+        "Time unavailable",
+        "This time slot already has a plan. Please choose another time."
+      );
+      return;
+    }
+
     setSelectedSlot({ start, end });
     setEditingEvent(null);
     setNewEvent({
@@ -369,8 +442,39 @@ Make it friendly, actionable, and around 2–3 sentences.`;
   // ✅ SAVE EDIT  (🔗 users/{uid}/plannerEvents/{eventId})
   const handleSaveEdit = async () => {
     try {
-      if (!editingEvent || !user) throw new Error("No event / not logged in.");
-      const color = getColorForDate(selectedSlot.start, newEvent.priority);
+      if (!editingEvent || !user) {
+        showError(
+          "Update error",
+          "No event selected or you are not logged in."
+        );
+        return;
+      }
+
+      if (!selectedSlot) {
+        showError("Missing time", "Please select a valid time range.");
+        return;
+      }
+
+      const { start, end } = selectedSlot;
+
+      // 🚫 Prevent moving/editing to today or past
+      if (isTodayOrPast(start)) {
+        showError(
+          "Invalid date",
+          "Plans can only be scheduled from tomorrow and onward."
+        );
+        return;
+      }
+
+      if (overlaps(start, end, editingEvent.id)) {
+        showError(
+          "Time unavailable",
+          "This time range overlaps with another plan."
+        );
+        return;
+      }
+
+      const color = getColorForDate(start, newEvent.priority);
       const docRef = doc(
         db,
         "users",
@@ -382,22 +486,28 @@ Make it friendly, actionable, and around 2–3 sentences.`;
       console.log("[UPDATE] doc:", docRef.path);
       await updateDoc(docRef, {
         ...newEvent,
-        start: selectedSlot.start,
-        end: selectedSlot.end,
+        start,
+        end,
         color,
       });
       setIsModalOpen(false);
       setEditingEvent(null);
     } catch (err) {
       console.error("[UPDATE] failed:", err);
-      alert("Update failed: " + (err?.message || ""));
+      showError("Update failed", err?.message || "Unable to update this plan.");
     }
   };
 
   // ✅ DELETE  (🔗 users/{uid}/plannerEvents/{eventId})
   const handleDeleteEvent = async () => {
     try {
-      if (!editingEvent || !user) throw new Error("No event / not logged in.");
+      if (!editingEvent || !user) {
+        showError(
+          "Delete error",
+          "No event selected or you are not logged in."
+        );
+        return;
+      }
       const ref = doc(db, "users", user.uid, "plannerEvents", editingEvent.id);
       console.log("[DELETE] doc:", ref.path);
       await deleteDoc(ref);
@@ -405,22 +515,44 @@ Make it friendly, actionable, and around 2–3 sentences.`;
       setEditingEvent(null);
     } catch (err) {
       console.error("[DELETE] failed:", err);
-      alert("Delete failed: " + (err?.message || ""));
+      showError("Delete failed", err?.message || "Unable to delete this plan.");
     }
   };
 
   // ✅ DRAG & RESIZE  (🔗 users/{uid}/plannerEvents/{eventId})
   const handleEventMoveOrResize = async ({ event, start, end }) => {
     try {
-      if (!user) throw new Error("Not logged in.");
-      if (overlaps(start, end, event.id))
-        throw new Error("Time range overlaps!");
+      if (!user) {
+        showError("Sign in required", "Please sign in to modify plans.");
+        return;
+      }
+
+      // 🚫 Prevent moving to today or past
+      if (isTodayOrPast(start)) {
+        showError(
+          "Invalid move",
+          "Plans cannot be moved to today or past dates."
+        );
+        return;
+      }
+
+      if (overlaps(start, end, event.id)) {
+        showError(
+          "Time unavailable",
+          "This time range overlaps with another plan."
+        );
+        return;
+      }
+
       const ref = doc(db, "users", user.uid, "plannerEvents", event.id);
       console.log("[MOVE/RESIZE] doc:", ref.path, "->", start, end);
       await updateDoc(ref, { start: new Date(start), end: new Date(end) });
     } catch (err) {
       console.error("[MOVE/RESIZE] failed:", err);
-      alert("Move/resize failed: " + (err?.message || ""));
+      showError(
+        "Move/resize failed",
+        err?.message || "Unable to move or resize this plan."
+      );
     }
   };
 
@@ -563,6 +695,41 @@ Make it friendly, actionable, and around 2–3 sentences.`;
           color: #4b5563;
         }
       `}</style>
+
+      {/* 🔔 Toast / Error UI */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            key={toast.id}
+            initial={{ opacity: 0, y: -10, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -10, scale: 0.97 }}
+            className="fixed top-4 right-4 z-[70] max-w-sm w-full"
+          >
+            <div className="flex items-start gap-3 rounded-2xl border border-red-200 bg-white dark:bg-slate-900 dark:border-red-500/40 shadow-lg px-4 py-3">
+              <div className="mt-0.5">
+                <AlertCircle className="text-red-500 dark:text-red-400" size={18} />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+                  {toast.title}
+                </p>
+                {toast.message && (
+                  <p className="mt-0.5 text-xs text-slate-600 dark:text-slate-300">
+                    {toast.message}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setToast(null)}
+                className="p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+              >
+                <X size={14} className="text-slate-500 dark:text-slate-400" />
+              </button>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* HEADER */}
       <div className="flex items-center justify-between gap-3 mb-6">
