@@ -37,6 +37,249 @@ if (!SENDER_EMAIL) {
 const APP_NAME = "Task Master";
 
 /* ==========================================================
+   🎨 EMAIL TEMPLATE HELPERS (shared by tasks & planner)
+   ========================================================== */
+
+const EMAIL_PRIMARY_COLOR = "#4f46e5";
+
+const emailBaseStyles = {
+  body: `
+    margin: 0;
+    padding: 0;
+    background-color: #f3f4f6;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  `,
+  container: `
+    max-width: 600px;
+    margin: 24px auto;
+    padding: 0 16px;
+  `,
+  card: `
+    background-color: #ffffff;
+    border-radius: 16px;
+    padding: 24px 20px;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.08);
+    border: 1px solid #e5e7eb;
+  `,
+  headerTitle: `
+    font-size: 20px;
+    font-weight: 700;
+    color: #111827;
+    margin: 0 0 4px 0;
+  `,
+  headerSubtitle: `
+    font-size: 13px;
+    color: #6b7280;
+    margin: 0 0 16px 0;
+  `,
+  pill: `
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background-color: rgba(79, 70, 229, 0.08);
+    color: ${EMAIL_PRIMARY_COLOR};
+  `,
+  sectionTitle: `
+    font-size: 13px;
+    font-weight: 600;
+    color: #4b5563;
+    margin: 16px 0 8px 0;
+  `,
+  detailRowLabel: `
+    font-size: 12px;
+    color: #6b7280;
+    width: 110px;
+    vertical-align: top;
+    padding: 2px 0;
+  `,
+  detailRowValue: `
+    font-size: 13px;
+    color: #111827;
+    padding: 2px 0;
+  `,
+  footer: `
+    font-size: 11px;
+    color: #9ca3af;
+    text-align: center;
+    margin-top: 18px;
+  `,
+};
+
+function wrapEmailLayout(content, { title = "", preheader = "" } = {}) {
+  // Preheader is placed first in body so inbox preview looks nice
+  return `
+  <!DOCTYPE html>
+  <html lang="en">
+    <head>
+      <meta charset="UTF-8" />
+      <title>${title}</title>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    </head>
+    <body style="${emailBaseStyles.body}">
+      <span style="display:none!important;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all;">
+        ${preheader}
+      </span>
+      <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+          <td>
+            <div style="${emailBaseStyles.container}">
+              ${content}
+              <p style="${emailBaseStyles.footer}">
+                You’re receiving this email because you enabled notifications in ${APP_NAME}.<br/>
+                If you’d like to stop these, you can adjust your notification settings inside the app.
+              </p>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </body>
+  </html>`;
+}
+
+/** Task deadline reminder template */
+function buildTaskReminderHtml({
+  taskTitle,
+  formattedTime,
+  priority,
+  status,
+}) {
+  const content = `
+    <div style="${emailBaseStyles.card}">
+      <div style="margin-bottom: 16px;">
+        <span style="${emailBaseStyles.pill}">Task Due</span>
+      </div>
+
+      <h1 style="${emailBaseStyles.headerTitle}">
+        Reminder: “${taskTitle}”
+      </h1>
+      <p style="${emailBaseStyles.headerSubtitle}">
+        Hi there, this is a friendly reminder from ${APP_NAME}. You have a task that is due soon. Review the details below and update your progress when you’re done.
+      </p>
+
+      <h2 style="${emailBaseStyles.sectionTitle}">
+        Task details
+      </h2>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        <tr>
+          <td style="${emailBaseStyles.detailRowLabel}">Task</td>
+          <td style="${emailBaseStyles.detailRowValue}">
+            <strong>${taskTitle}</strong>
+          </td>
+        </tr>
+        <tr>
+          <td style="${emailBaseStyles.detailRowLabel}">Due</td>
+          <td style="${emailBaseStyles.detailRowValue}">
+            ${formattedTime}
+          </td>
+        </tr>
+        ${
+          priority
+            ? `
+        <tr>
+          <td style="${emailBaseStyles.detailRowLabel}">Priority</td>
+          <td style="${emailBaseStyles.detailRowValue}">
+            ${priority}
+          </td>
+        </tr>`
+            : ""
+        }
+        <tr>
+          <td style="${emailBaseStyles.detailRowLabel}">Status</td>
+          <td style="${emailBaseStyles.detailRowValue}">
+            ${status || "Not set"}
+          </td>
+        </tr>
+      </table>
+
+      <p style="font-size:13px;color:#4b5563;margin-top:18px;">
+        Open <strong>${APP_NAME}</strong> to check this task off once you’re done ✅
+      </p>
+    </div>
+  `;
+
+  return wrapEmailLayout(content, {
+    title: `${APP_NAME} · Task due reminder`,
+    preheader: `“${taskTitle}” is due at ${formattedTime}.`,
+  });
+}
+
+/** Planner upcoming plan reminder template */
+function buildPlannerReminderHtml({
+  title,
+  agenda,
+  where,
+  formattedStart,
+}) {
+  const content = `
+    <div style="${emailBaseStyles.card}">
+      <div style="margin-bottom: 16px;">
+        <span style="${emailBaseStyles.pill}">Planner</span>
+      </div>
+
+      <h1 style="${emailBaseStyles.headerTitle}">
+        Upcoming: “${title}”
+      </h1>
+      <p style="${emailBaseStyles.headerSubtitle}">
+        Hi there, this is a reminder from ${APP_NAME}. You have something scheduled in your planner. Here are the details:
+      </p>
+
+      <h2 style="${emailBaseStyles.sectionTitle}">
+        Event details
+      </h2>
+      <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+        <tr>
+          <td style="${emailBaseStyles.detailRowLabel}">Title</td>
+          <td style="${emailBaseStyles.detailRowValue}">
+            <strong>${title}</strong>
+          </td>
+        </tr>
+        <tr>
+          <td style="${emailBaseStyles.detailRowLabel}">When</td>
+          <td style="${emailBaseStyles.detailRowValue}">
+            ${formattedStart}
+          </td>
+        </tr>
+        ${
+          agenda
+            ? `
+        <tr>
+          <td style="${emailBaseStyles.detailRowLabel}">Agenda</td>
+          <td style="${emailBaseStyles.detailRowValue}">
+            ${agenda}
+          </td>
+        </tr>`
+            : ""
+        }
+        ${
+          where
+            ? `
+        <tr>
+          <td style="${emailBaseStyles.detailRowLabel}">Where</td>
+          <td style="${emailBaseStyles.detailRowValue}">
+            ${where}
+          </td>
+        </tr>`
+            : ""
+        }
+      </table>
+
+      <p style="font-size:13px;color:#4b5563;margin-top:18px;">
+        Stay on top of your schedule with <strong>${APP_NAME}</strong> 🚀
+      </p>
+    </div>
+  `;
+
+  return wrapEmailLayout(content, {
+    title: `${APP_NAME} · Planner reminder`,
+    preheader: `“${title}” is scheduled at ${formattedStart}.`,
+  });
+}
+
+/* ==========================================================
    ⏰ Scheduled reminder function — TASK DEADLINES
    ========================================================== */
 export const sendDeadlineReminders = onSchedule(
@@ -119,24 +362,19 @@ export const sendDeadlineReminders = onSchedule(
           month: "short",
         });
 
+        // 🔁 NEW: use nicer HTML template, same data
+        const html = buildTaskReminderHtml({
+          taskTitle: task.title || "Task",
+          formattedTime,
+          priority: task.priority || "",
+          status: task.status || "",
+        });
+
         const msg = {
           to: task.userEmail,
           from: { email: SENDER_EMAIL, name: APP_NAME },
           subject: `⏰ Reminder: "${task.title}" is due soon`,
-          html: `
-            <h2 style="color:#4f46e5;">${APP_NAME}</h2>
-            <p>Hi there,</p>
-            <p>Your task <strong>"${task.title}"</strong> is due at <strong>${formattedTime}</strong>.</p>
-            ${
-              task.priority
-                ? `<p>Priority: <strong>${task.priority}</strong></p>`
-                : ""
-            }
-            <p>Status: <strong>${task.status}</strong></p>
-            <p>Please make sure to complete it on time!</p>
-            <hr/>
-            <p style="font-size:12px;color:#777;">This is an automated reminder from ${APP_NAME}.</p>
-          `,
+          html,
         };
 
         const emailPromise = sgMail
@@ -349,24 +587,20 @@ export const sendUpcomingPlanReminders = onSchedule(
         });
 
         const subject = `📅 Reminder: "${title}" is coming up`;
-        const htmlLines = [
-          `<h2 style="color:#4f46e5;">${APP_NAME}</h2>`,
-          `<p>Hi there,</p>`,
-          `<p>This is a reminder that you have an upcoming plan:</p>`,
-          `<p><strong>${title}</strong></p>`,
-          agenda ? `<p><strong>Agenda:</strong> ${agenda}</p>` : "",
-          where ? `<p><strong>Where:</strong> ${where}</p>` : "",
-          `<p><strong>When:</strong> ${formattedStart}</p>`,
-          `<p>Good luck, and stay productive! 🚀</p>`,
-          `<hr/>`,
-          `<p style="font-size:12px;color:#777;">This is an automated planner reminder from ${APP_NAME}.</p>`,
-        ].filter(Boolean);
+
+        // 🔁 NEW: use shared planner email template
+        const html = buildPlannerReminderHtml({
+          title,
+          agenda,
+          where,
+          formattedStart,
+        });
 
         const msg = {
           to: userEmail,
           from: { email: SENDER_EMAIL, name: APP_NAME },
           subject,
-          html: htmlLines.join(""),
+          html,
         };
 
         const emailPromise = sgMail
