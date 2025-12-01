@@ -7,6 +7,9 @@ import {
   X,
   History,
   ChevronDown,
+  CheckCircle,
+  PartyPopper,
+  Sparkles,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { format } from "date-fns";
@@ -108,6 +111,9 @@ export default function PlannerSummary() {
   // which cards are expanded (IDs)
   const [expandedIds, setExpandedIds] = useState([]);
 
+  // 🎉 celebration state
+  const [celebrateEvent, setCelebrateEvent] = useState(null);
+
   const navigate = useNavigate();
 
   // 👤 Ensure user & /users/{uid} doc exists
@@ -153,13 +159,27 @@ export default function PlannerSummary() {
             return {
               id: d.id,
               ...raw,
-              start: raw.start?.toDate ? raw.start.toDate() : new Date(raw.start),
-              end: raw.end?.toDate ? raw.end.toDate() : new Date(raw.end),
+              start: raw.start?.toDate
+                ? raw.start.toDate()
+                : raw.start
+                ? new Date(raw.start)
+                : null,
+              end: raw.end?.toDate
+                ? raw.end.toDate()
+                : raw.end
+                ? new Date(raw.end)
+                : null,
               createdAt: raw.createdAt?.toDate
                 ? raw.createdAt.toDate()
                 : raw.createdAt
                 ? new Date(raw.createdAt)
                 : null,
+              completedAt: raw.completedAt?.toDate
+                ? raw.completedAt.toDate()
+                : raw.completedAt
+                ? new Date(raw.completedAt)
+                : null,
+              completed: !!raw.completed,
             };
           });
           setEvents(data);
@@ -307,6 +327,31 @@ export default function PlannerSummary() {
     } catch (e) {
       console.error("[Summary delete] error:", e);
       alert("Delete failed: " + (e?.message || e));
+    }
+  };
+
+  // ✅ Mark plan as completed
+  const handleComplete = async (event) => {
+    if (!user || !event) return;
+    try {
+      await setDoc(
+        doc(db, "users", user.uid, "plannerEvents", event.id),
+        {
+          completed: true,
+          completedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
+      // close modal if open
+      setSelectedEvent(null);
+      setIsModalOpen(false);
+
+      // open celebration popup
+      setCelebrateEvent(event);
+    } catch (e) {
+      console.error("[Summary complete] error:", e);
+      alert("Mark as completed failed: " + (e?.message || e));
     }
   };
 
@@ -518,6 +563,7 @@ export default function PlannerSummary() {
             const durationLabel = getDurationLabel(event.start, event.end);
             const isPast = event.start < now;
             const isExpanded = expandedIds.includes(event.id);
+            const isCompleted = !!event.completed;
 
             return (
               <div
@@ -535,6 +581,11 @@ export default function PlannerSummary() {
                         {event.title || "Untitled plan"}
                       </h2>
                       {priorityBadge(event.priority || "medium")}
+                      {isCompleted && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                          ✅ Completed
+                        </span>
+                      )}
                     </div>
                     <p className="text-[11px] md:text-xs text-slate-500 dark:text-slate-400">
                       {event.start
@@ -548,7 +599,11 @@ export default function PlannerSummary() {
                         : "No time set"}
                     </p>
                     <p className="text-[11px] md:text-xs text-slate-500 dark:text-slate-400">
-                      {isPast ? "✅ Past plan" : "📅 Upcoming"}
+                      {isCompleted
+                        ? "🏁 Completed plan"
+                        : isPast
+                        ? "✅ Past plan"
+                        : "📅 Upcoming"}
                       {durationLabel && (
                         <span className="ml-1 text-[11px] md:text-xs text-slate-400 dark:text-slate-500">
                           • Session: {durationLabel}
@@ -598,12 +653,24 @@ export default function PlannerSummary() {
                         </p>
                       )}
 
-                      <button
-                        onClick={() => handleOpenModal(event)}
-                        className="mt-3 inline-flex items-center gap-1 text-[11px] md:text-xs px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100"
-                      >
-                        View full details
-                      </button>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => handleOpenModal(event)}
+                          className="inline-flex items-center gap-1 text-[11px] md:text-xs px-3 py-1.5 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-100"
+                        >
+                          View full details
+                        </button>
+
+                        {viewMode === "summary" && !isCompleted && (
+                          <button
+                            onClick={() => handleComplete(event)}
+                            className="inline-flex items-center gap-1 text-[11px] md:text-xs px-3 py-1.5 rounded-full bg-emerald-500 hover:bg-emerald-600 text-white"
+                          >
+                            <CheckCircle size={14} />
+                            Mark as completed
+                          </button>
+                        )}
+                      </div>
                     </div>
 
                     <div className="md:text-right text-xs md:text-sm text-slate-500 dark:text-slate-400 min-w-[220px] flex flex-col items-start md:items-end gap-1">
@@ -648,6 +715,11 @@ export default function PlannerSummary() {
                 {selectedEvent.title || "Untitled plan"}
               </h2>
               {priorityBadge(selectedEvent.priority || "medium")}
+              {selectedEvent.completed && (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
+                  ✅ Completed
+                </span>
+              )}
             </div>
 
             <p className="text-xs text-slate-500 dark:text-slate-400 mb-3">
@@ -673,6 +745,15 @@ export default function PlannerSummary() {
                 {getDurationLabel(selectedEvent.start, selectedEvent.end) ||
                   "—"}
               </p>
+              {selectedEvent.completedAt && (
+                <p>
+                  <span className="font-semibold">Completed on:</span>{" "}
+                  {format(
+                    selectedEvent.completedAt,
+                    "EEE, MMM d yyyy • h:mm a"
+                  )}
+                </p>
+              )}
               {selectedEvent.deletedAt && viewMode === "history" && (
                 <p>
                   <span className="font-semibold">Deleted on:</span>{" "}
@@ -724,22 +805,89 @@ export default function PlannerSummary() {
             )}
 
             <div className="mt-5 flex flex-col md:flex-row md:justify-between gap-3">
-              {viewMode === "summary" && (
-                <button
-                  onClick={() => {
-                    handleDelete(selectedEvent);
-                  }}
-                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs md:text-sm bg-red-500 hover:bg-red-600 text-white transition"
-                >
-                  <Trash2 size={14} />
-                  Delete this plan
-                </button>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {viewMode === "summary" && !selectedEvent.completed && (
+                  <button
+                    onClick={() => handleComplete(selectedEvent)}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs md:text-sm bg-emerald-500 hover:bg-emerald-600 text-white transition"
+                  >
+                    <CheckCircle size={14} />
+                    Mark as completed
+                  </button>
+                )}
+
+                {viewMode === "summary" && (
+                  <button
+                    onClick={() => {
+                      handleDelete(selectedEvent);
+                    }}
+                    className="inline-flex items-center justify-center gap-1.5 px-4 py-2 rounded-xl text-xs md:text-sm bg-red-500 hover:bg-red-600 text-white transition"
+                  >
+                    <Trash2 size={14} />
+                    Delete this plan
+                  </button>
+                )}
+              </div>
+
               <button
                 onClick={handleCloseModal}
                 className="inline-flex items-center justify-center px-4 py-2 rounded-xl text-xs md:text-sm bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 transition"
               >
                 Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🎉 CELEBRATION POPUP */}
+      {celebrateEvent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="relative bg-gradient-to-br from-indigo-600 via-violet-600 to-fuchsia-500 text-white p-7 rounded-2xl shadow-2xl w-[90%] max-w-md overflow-hidden">
+            {/* confetti-like emojis */}
+            <div className="pointer-events-none absolute inset-0 opacity-40">
+              <div className="absolute -top-6 -left-6 text-5xl">🎉</div>
+              <div className="absolute top-4 right-3 text-4xl">✨</div>
+              <div className="absolute bottom-2 left-6 text-4xl">🎊</div>
+            </div>
+
+            <button
+              className="absolute top-3 right-3 text-indigo-100 hover:text-white z-10"
+              onClick={() => setCelebrateEvent(null)}
+            >
+              <X size={18} />
+            </button>
+
+            <div className="relative z-10 flex flex-col items-center text-center">
+              <div className="mb-4">
+                <div className="w-20 h-20 rounded-full bg-white/10 flex items-center justify-center border-2 border-white/40 backdrop-blur-sm">
+                  <CheckCircle className="w-12 h-12 text-emerald-300" />
+                </div>
+              </div>
+
+              <h2 className="text-2xl font-extrabold mb-2 tracking-tight">
+                Plan Completed!
+              </h2>
+              <p className="text-indigo-100 text-sm mb-2 flex items-center justify-center gap-1">
+                <PartyPopper size={16} />
+                Awesome work, you just finished a plan.
+              </p>
+
+              <p className="text-sm bg-white/10 px-3 py-2 rounded-lg mb-4 max-w-xs">
+                <span className="font-semibold">
+                  {celebrateEvent.title || "Untitled plan"}
+                </span>{" "}
+                <span className="opacity-80">
+                  is now marked as <strong>Completed</strong>.
+                </span>
+              </p>
+
+              <button
+                onClick={() => setCelebrateEvent(null)}
+                className="w-full bg-white text-indigo-700 font-semibold py-2.5 rounded-lg shadow-md hover:bg-indigo-50 transition-all flex items-center justify-center gap-2"
+              >
+                <Sparkles size={16} />
+                Continue
               </button>
             </div>
           </div>

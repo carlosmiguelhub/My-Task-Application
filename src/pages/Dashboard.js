@@ -262,7 +262,7 @@ const Dashboard = () => {
     return () => unsubscribeList.forEach((u) => u());
   }, [user]);
 
-  // ✅ Load upcoming planner events
+  // ✅ Load upcoming planner events (ignore completed plans)
   useEffect(() => {
     if (!user) return;
 
@@ -303,12 +303,17 @@ const Dashboard = () => {
               (typeof d.createdAt === "string"
                 ? new Date(d.createdAt)
                 : new Date()),
+            completed: !!d.completed,
+            completedAt:
+              d.completedAt?.toDate?.() ??
+              (d.completedAt ? new Date(d.completedAt) : null),
           };
         });
 
         const now = new Date();
         const upcoming = data.filter(
           (p) =>
+            !p.completed && // ❌ skip completed plans
             p.start instanceof Date &&
             !isNaN(p.start) &&
             p.start.getTime() >= now.getTime() - 1000 * 60 * 60 * 24
