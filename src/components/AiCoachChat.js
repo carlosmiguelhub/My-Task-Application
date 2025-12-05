@@ -50,7 +50,7 @@ const AiCoachChat = () => {
 
     try {
       const apiUrl =
-        process.env.REACT_APP_AI_COACH_URL || "/aiCoachLite";
+        process.env.REACT_APP_AI_COACH_URL || "https://us-central1-taskmaster-app-642b7.cloudfunctions.net/aiCoachLite";
 
       const res = await fetch(apiUrl, {
         method: "POST",
