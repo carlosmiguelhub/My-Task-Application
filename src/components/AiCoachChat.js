@@ -94,7 +94,7 @@ const AiCoachChat = () => {
         className="fixed bottom-6 right-6 z-30 flex items-center gap-2 rounded-full px-4 py-3 shadow-lg bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-sm font-medium hover:scale-105 transition-transform"
       >
         <Sparkles className="w-4 h-4" />
-        <span>AI Coach</span>
+        <span>Task AI Assistant</span>
       </button>
 
       {/* Fullscreen chat modal */}

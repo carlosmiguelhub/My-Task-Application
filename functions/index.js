@@ -707,7 +707,7 @@ export const debugUpcomingPlansWindow = onRequest(async (req, res) => {
   }
 });
 /* ==========================================================
-   🤖 AI COACH LITE — Gemini + real tasks (Firestore + chat history)
+   🤖 AI COACH LITE — Gemini + tasks + planner + chat history
    ========================================================== */
 
 export const aiCoachLite = onRequest({ cors: true }, async (req, res) => {
@@ -742,7 +742,7 @@ export const aiCoachLite = onRequest({ cors: true }, async (req, res) => {
     const chatsRef = userDocRef.collection("aiCoachChats");
 
     /* ============================
-       1) Load user's tasks (REAL-TIME SAFE)
+       1) Load user's tasks
        ============================ */
     let tasksText =
       "The user currently has no saved tasks in their workspace. Give advice for starting from scratch or planning new tasks.";
@@ -801,7 +801,77 @@ export const aiCoachLite = onRequest({ cors: true }, async (req, res) => {
     }
 
     /* ============================
-       2) Load recent chat history
+       2) Load user's planner events
+       ============================ */
+
+    let plansText =
+      "The user currently has no scheduled plans in their planner. If relevant, help them decide what to schedule or how to structure their day.";
+
+    try {
+      const plansSnap = await userDocRef.collection("plannerEvents").get();
+      const plans = [];
+      plansSnap.forEach((doc) => plans.push(doc.data()));
+
+      if (plans.length > 0) {
+        const normalizedPlans = plans.map((p) => {
+          const startRaw = p.start?.toDate
+            ? p.start.toDate()
+            : p.start
+            ? new Date(p.start)
+            : null;
+          const endRaw = p.end?.toDate
+            ? p.end.toDate()
+            : p.end
+            ? new Date(p.end)
+            : null;
+
+          const startStr = startRaw
+            ? startRaw.toLocaleString("en-PH", {
+                timeZone: APP_TIME_ZONE,
+                month: "short",
+                day: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "no start time";
+
+          const endStr = endRaw
+            ? endRaw.toLocaleTimeString("en-PH", {
+                timeZone: APP_TIME_ZONE,
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : null;
+
+          const windowStr = endStr ? `${startStr} → ${endStr}` : startStr;
+
+          return {
+            title: p.title || "Untitled plan",
+            status: p.status || "scheduled",
+            category: p.category || p.type || "general",
+            startTs: startRaw ? startRaw.getTime() : Number.POSITIVE_INFINITY,
+            windowStr,
+          };
+        });
+
+        normalizedPlans.sort((a, b) => a.startTs - b.startTs);
+        const topPlans = normalizedPlans.slice(0, 25);
+
+        plansText =
+          "Here are the user's current scheduled plans from the planner:\n\n" +
+          topPlans
+            .map(
+              (p, idx) =>
+                `${idx + 1}. [${p.status}] ${p.title} — category: ${p.category}, time: ${p.windowStr}`
+            )
+            .join("\n");
+      }
+    } catch (err) {
+      logger.error("❌ Failed to load planner events:", err);
+    }
+
+    /* ============================
+       3) Load recent chat history
        ============================ */
 
     let historyText = "No previous conversation with this user.";
@@ -822,7 +892,7 @@ export const aiCoachLite = onRequest({ cors: true }, async (req, res) => {
               const role = m.role === "assistant" ? "Coach" : "User";
               const text =
                 typeof m.content === "string"
-                  ? m.content.slice(0, 300) // safety trim
+                  ? m.content.slice(0, 300)
                   : "";
               return `${idx + 1}. ${role}: ${text}`;
             })
@@ -833,7 +903,7 @@ export const aiCoachLite = onRequest({ cors: true }, async (req, res) => {
     }
 
     /* ============================
-       3) Build prompt for Gemini
+       4) Build prompt for Gemini
        ============================ */
 
     const systemText = `
@@ -845,9 +915,11 @@ Guidelines for your replies:
 - First, briefly reflect what you understand about the user's situation
   (1–2 sentences maximum).
 - Then give 2–4 specific recommendations, prioritised using the task list
-  you are given (deadlines, priority, and status).
+  and planner schedule you are given (deadlines, priority, and timing).
 - Be concrete: mention task types or patterns (e.g. "finish the presentation
   that's due soon", "handle one quick admin task") rather than only generic tips.
+- When relevant, align suggestions with existing plans in the planner
+  (for example, don't overschedule the same time block twice).
 - Keep answers focused and not too long (aim for 2–5 short paragraphs total).
 - Use a neutral, professional tone. Emojis are optional and should be used
   sparingly (at most one per reply, and only if it fits).
@@ -867,17 +939,22 @@ TASK SUMMARY
 ------------
 ${tasksText}
 
+PLAN SUMMARY (from the planner)
+-------------------------------
+${plansText}
+
 NEW USER MESSAGE
 ----------------
 "${message}"
 
 Now give a single, coherent answer following the guidelines above.
-Do not show the raw task list or the full conversation back to the user;
-instead, turn it into clear recommendations and a short, realistic plan.
+Do not show the raw task list, plan list, or full conversation back to the user;
+instead, turn it into clear recommendations and a short, realistic plan that
+respects the user's existing schedule.
 `.trim();
 
     /* ============================
-       4) Call Gemini
+       5) Call Gemini
        ============================ */
 
     const endpoint = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
@@ -903,17 +980,30 @@ instead, turn it into clear recommendations and a short, realistic plan.
       body: JSON.stringify(geminiBody),
     });
 
-    if (!geminiRes.ok) {
-      const errorText = await geminiRes.text();
-      logger.error("❌ Gemini HTTP error (aiCoachLite):", {
-        status: geminiRes.status,
-        body: errorText,
-      });
-      res
-        .status(500)
-        .json({ error: "Gemini request failed", details: errorText });
-      return;
-    }
+   if (!geminiRes.ok) {
+  const errorText = await geminiRes.text();
+  logger.error("❌ Gemini HTTP error (aiCoachLite):", {
+    status: geminiRes.status,
+    body: errorText,
+  });
+
+  // 🔹 If Gemini is overloaded, send a friendly message instead of hard error
+  if (geminiRes.status === 503) {
+    res.status(200).json({
+      reply:
+        "The AI model is temporarily overloaded and couldn’t respond right now. Try asking again in a minute or two, and I’ll be here to help.",
+    });
+    return;
+  }
+
+  // 🔹 All other errors: keep existing behavior
+  res.status(500).json({
+    error: "Gemini request failed",
+    details: errorText,
+  });
+  return;
+}
+
 
     const geminiData = await geminiRes.json();
 
@@ -939,7 +1029,7 @@ instead, turn it into clear recommendations and a short, realistic plan.
       .trim();
 
     /* ============================
-       5) Save this turn to Firestore
+       6) Save this turn to Firestore
        ============================ */
 
     try {
