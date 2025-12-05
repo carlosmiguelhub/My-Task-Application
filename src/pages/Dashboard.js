@@ -48,17 +48,11 @@ const formatDiff = (ms) => {
 
 const PlanCountdown = ({ createdAt, end }) => {
   const [timeLeft, setTimeLeft] = useState("");
-  const [duration, setDuration] = useState("");
 
   useEffect(() => {
     if (!end) return;
 
     const endDate = end instanceof Date ? end : new Date(end);
-    const createdDate = createdAt
-      ? createdAt instanceof Date
-        ? createdAt
-        : new Date(createdAt)
-      : null;
 
     const tick = () => {
       const now = Date.now();
@@ -66,39 +60,27 @@ const PlanCountdown = ({ createdAt, end }) => {
       const remaining = endMs - now;
 
       if (remaining <= 0) {
-        setTimeLeft(`Expired (${formatDiff(remaining)} ago)`);
+        setTimeLeft("Expired");
       } else {
         setTimeLeft(formatDiff(remaining));
-      }
-
-      if (createdDate) {
-        const durMs = endMs - createdDate.getTime();
-        setDuration(formatDiff(durMs));
-      } else {
-        setDuration("");
       }
     };
 
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [createdAt, end]);
+  }, [end]);
 
   if (!end) return null;
 
   return (
-    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400 space-y-0.5">
-      <div>
-        <span className="font-semibold">Duration:</span>{" "}
-        {duration || "—"}
-      </div>
-      <div>
-        <span className="font-semibold">Time left:</span>{" "}
-        {timeLeft}
-      </div>
+    <div className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
+      <span className="font-semibold">Time left:</span>{" "}
+      {timeLeft}
     </div>
   );
 };
+
 
 const Dashboard = () => {
   const { user } = useSelector((state) => state.auth);
@@ -133,44 +115,99 @@ const Dashboard = () => {
   const guideSteps = [
     {
       title: "Welcome to Task Master",
-      body: "This dashboard gives you a quick overview of your work: tasks, boards, and upcoming plans.",
-      tip: "Start with Boards to organize different projects or areas of your life.",
+      body:
+        "This dashboard is your control center. From here you can see your tasks, boards, upcoming plans, and productivity stats at a glance.",
+      tip: "Think of Task Master as your personal command center for work, school, and personal goals.",
+      details: [
+        "Use the left sidebar to move between Home, Boards, Planner, and Analytics.",
+        "The summary cards at the top show how many tasks are Total, In Progress, Pending, and Completed.",
+        "The Next Plan card gives you a quick view of your nearest scheduled event."
+      ],
     },
     {
-      title: "Boards",
-      body: "Boards let you group related tasks together (e.g., Work, Personal, School).",
-      tip: "Go to the Boards page and click 'Create New Board' to make your first board.",
+      title: "Boards – organize your work by area",
+      body:
+        "Boards are like separate workspaces or folders. Each board represents a project, area of life, or category (e.g., Work, School, Personal, Freelance).",
+      tip: "Create different boards for different contexts so your tasks stay focused and less overwhelming.",
+      details: [
+        "Go to the Boards page and click “Create New Board” to add a new board.",
+        "Name boards after projects (e.g., “Thesis”, “Client A”, “Fitness Plan”) so you instantly know what they’re about.",
+        "Inside each board, tasks are usually grouped by status: Pending, In Progress, and Done.",
+        "Open a board by clicking on it, then use the Add Task button to start filling it with items."
+      ],
       actionLabel: "Go to Boards",
       action: () => setActivePage("boards"),
     },
     {
-      title: "Tasks inside Boards",
-      body: "Each board contains tasks that you can move between statuses like Pending, In Progress, and Done.",
-      tip: "Open a board and use the add task button to start filling it with work items.",
+      title: "Tasks – break work into actionable steps",
+      body:
+        "Tasks live inside boards. They’re the individual things you actually need to do, like “Write introduction”, “Email client”, or “Study Chapter 3”.",
+      tip: "Make tasks small and actionable so they’re easy to start and easy to finish.",
+      details: [
+        "Each task can have a title, description, due date (depending on how you set it up in the board), and a status.",
+        "Move tasks from Pending → In Progress → Done as you work on them.",
+        "Use the most recent tasks list on the Home page to quickly jump back into what you were just working on."
+      ],
     },
     {
-      title: "Planner & Plans",
-      body: "The Planner is your calendar-style view where you can schedule plans, events, and deadlines.",
-      tip: "Use it for time-bound items like meetings, exams, or due dates.",
+      title: "Planner – schedule your plans and events",
+      body:
+        "The Planner is your calendar-style view. Use it for anything time-bound: classes, meetings, deadlines, exams, or reminders.",
+      tip: "If it has a date and time, it belongs in the Planner instead of a regular task.",
+      details: [
+        "Open the Planner from the sidebar or the “View Your Plans” shortcut on the Home page.",
+        "Click on a date/time slot in the Planner to create a new plan or event.",
+        "Add a clear title, where it happens (location), and any important notes or agenda items.",
+        "You can drag and drop events in the Planner (if you enabled drag & drop) to reschedule them quickly."
+      ],
       actionLabel: "Open Planner",
       action: () => navigate("/planner"),
     },
     {
-      title: "Next Plan & Countdown",
-      body: "This card shows your nearest upcoming plan and a live countdown until it happens.",
-      tip: "Create plans in the Planner to see them appear here and keep track of important dates.",
+      title: "Next Plan & Countdown – never miss what’s next",
+      body:
+        "On the Home page, the Next Plan card shows your closest upcoming plan with a live countdown until it starts.",
+      tip: "Use this card as a quick way to see what’s coming up next without opening the full Planner.",
+      details: [
+        "The card shows the plan title, tag (like category), location, and a short description if you added one.",
+        "The Time left value counts down in real-time so you can see how much time you have before it starts.",
+        "Only upcoming, not completed, plans are shown here to keep it focused on what’s ahead."
+      ],
     },
     {
-      title: "Analytics & Progress",
-      body: "Analytics helps you see how many tasks are done, in progress, or pending.",
-      tip: "Use this to understand your productivity and where you’re getting stuck.",
+      title: "Analytics & Progress – see how you’re doing",
+      body:
+        "Analytics helps you understand your productivity: how many tasks are done, in progress, or still pending.",
+      tip: "Check Analytics regularly to see whether you’re finishing tasks or stacking up too many pending ones.",
+      details: [
+        "Use it to spot patterns, like always leaving certain types of tasks unfinished.",
+        "If Pending is high and Done is low, try breaking big tasks into smaller ones.",
+        "Celebrate your Completed tasks – that’s your actual progress."
+      ],
       actionLabel: "View Analytics",
       action: () => navigate("/analytics"),
     },
     {
+      title: "AI Coach – get guidance when you’re stuck",
+      body:
+        "The AI Coach chat can help you decide what to focus on, how to prioritize, or how to plan your day using your real tasks.",
+      tip: "Ask questions like “What should I work on next?” or “How do I plan my day around these deadlines?”.",
+      details: [
+        "You’ll see the AI Coach button floating so you can open it from anywhere.",
+        "It uses your tasks and plans (when available) to give context-aware suggestions.",
+        "Use it when you feel overwhelmed, stuck, or unsure what to do first."
+      ],
+    },
+    {
       title: "You’re ready to go!",
-      body: "Use Boards to organize, Tasks to execute, Planner to schedule, and Analytics to track progress.",
-      tip: "You can reopen this guide anytime using the Guide button.",
+      body:
+        "You now know how to use Boards, Tasks, Planner, Next Plan, Analytics, and the AI Coach together.",
+      tip: "Keep things simple: create boards, add tasks, schedule important events, and review your progress regularly.",
+      details: [
+        "Start each day by checking your Next Plan and your most important tasks.",
+        "End each day by moving finished tasks to Done and scheduling anything important in the Planner.",
+        "You can reopen this guide anytime using the Guide button on the Home page."
+      ],
     },
   ];
 
@@ -736,9 +773,7 @@ const Dashboard = () => {
                       {currentPlanMeta.formattedDate}
                     </p>
                     <p>{currentPlanMeta.formattedTime}</p>
-                    <p className="mt-1 text-[11px] text-indigo-600 dark:text-indigo-300 font-semibold">
-                      {currentPlanMeta.startsLabel}
-                    </p>
+                    
                   </div>
                 </div>
               )}
@@ -840,28 +875,45 @@ const Dashboard = () => {
         )}
 
         {/* ===== Guide Overlay ===== */}
+              {/* ===== Guide Overlay ===== */}
         {isGuideOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-            <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl p-6 w-full max-w-md relative border border-slate-200 dark:border-slate-700">
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white dark:bg-slate-900 rounded-3xl shadow-2xl p-8 w-full max-w-xl relative border border-indigo-100 dark:border-indigo-700/60"
+            >
               <button
                 onClick={handleGuideClose}
-                className="absolute top-3 right-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
-                <X size={18} />
+                <X size={20} />
               </button>
 
-              <div className="mb-4 text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                Quick Guide
+              <div className="mb-3 text-[11px] uppercase tracking-[0.2em] text-indigo-500 dark:text-indigo-300">
+                Task Master Guide
               </div>
 
-              <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-100 mb-2">
+              <h2 className="text-2xl font-semibold text-slate-800 dark:text-slate-100 mb-3">
                 {guideSteps[guideStep].title}
               </h2>
-              <p className="text-sm text-slate-600 dark:text-slate-300 mb-3">
+
+              <p className="text-sm md:text-base text-slate-600 dark:text-slate-300 mb-4 leading-relaxed">
                 {guideSteps[guideStep].body}
               </p>
+
+              {guideSteps[guideStep].details && (
+                <ul className="mb-4 pl-4 space-y-1.5 list-disc text-sm text-slate-600 dark:text-slate-300">
+                  {guideSteps[guideStep].details.map((item, idx) => (
+                    <li key={idx}>{item}</li>
+                  ))}
+                </ul>
+              )}
+
               {guideSteps[guideStep].tip && (
-                <div className="text-xs bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-200 rounded-lg px-3 py-2 mb-4 border border-indigo-100 dark:border-indigo-900/60">
+                <div className="text-xs md:text-sm bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-200 rounded-xl px-4 py-3 mb-4 border border-indigo-100 dark:border-indigo-900/60">
                   💡 {guideSteps[guideStep].tip}
                 </div>
               )}
@@ -873,49 +925,61 @@ const Dashboard = () => {
                     setIsGuideOpen(false);
                     setGuideStep(0);
                   }}
-                  className="mb-4 inline-flex items-center gap-1 text-xs font-medium text-indigo-600 dark:text-indigo-300 hover:underline"
+                  className="mb-4 inline-flex items-center gap-1 text-xs md:text-sm font-medium text-indigo-600 dark:text-indigo-300 hover:underline"
                 >
                   {guideSteps[guideStep].actionLabel} →
                 </button>
               )}
-              
 
               <div className="flex items-center justify-between mt-2">
-                <div className="text-xs text-slate-500 dark:text-slate-400">
-                  Step {guideStep + 1} of {guideSteps.length}
+                <div className="flex items-center gap-2">
+                  {/* step dots */}
+                  <div className="flex gap-1.5">
+                    {guideSteps.map((_, idx) => (
+                      <span
+                        key={idx}
+                        className={`h-2 w-2 rounded-full ${
+                          idx === guideStep
+                            ? "bg-indigo-600 dark:bg-indigo-400"
+                            : "bg-slate-300 dark:bg-slate-700"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs text-slate-500 dark:text-slate-400">
+                    Step {guideStep + 1} of {guideSteps.length}
+                  </span>
                 </div>
+
                 <div className="flex items-center gap-2">
                   <button
                     onClick={handleGuidePrev}
                     disabled={guideStep === 0}
-                    className="text-xs px-3 py-1 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Back
                   </button>
                   {guideStep === guideSteps.length - 1 ? (
                     <button
                       onClick={handleGuideClose}
-                      className="text-xs px-3 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+                      className="text-xs px-4 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
                     >
                       Finish
                     </button>
                   ) : (
                     <button
                       onClick={handleGuideNext}
-                      className="text-xs px-3 py-1 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
+                      className="text-xs px-4 py-1.5 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700"
                     >
                       Next
                     </button>
-
-                    
                   )}
-                  
                 </div>
               </div>
-            </div>
+            </motion.div>
           </div>
-          
         )}
+
       </motion.div>
       <div className="relative min-h-screen">
       {/* existing layout */}
