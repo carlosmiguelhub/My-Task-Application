@@ -38,6 +38,11 @@ const APP_NAME = "Task Master";
 /* ⭐ TIMEZONE: used for all email date formatting */
 const APP_TIME_ZONE = "Asia/Manila";
 
+/* 🔮 GEMINI AI CONFIG */
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || null;
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
+
 /* ==========================================================
    🎨 EMAIL TEMPLATE HELPERS (shared by tasks & planner)
    ========================================================== */
@@ -699,5 +704,222 @@ export const debugUpcomingPlansWindow = onRequest(async (req, res) => {
   } catch (err) {
     logger.error("❌ debugUpcomingPlansWindow failed:", err);
     res.status(500).send(String(err));
+  }
+});
+
+/* ==========================================================
+   🤖 AI COACH LITE — Gemini + real tasks (Firestore)
+   ========================================================== */
+
+export const aiCoachLite = onRequest({ cors: true }, async (req, res) => {
+  logger.info("🔥 aiCoachLite called", {
+    method: req.method,
+    hasBody: !!req.body,
+  });
+
+  try {
+    if (req.method !== "POST") {
+      logger.warn("❌ Non-POST request to aiCoachLite", { method: req.method });
+      res.status(405).json({ error: "Only POST allowed" });
+      return;
+    }
+
+    if (!GEMINI_API_KEY) {
+      logger.error("❌ GEMINI_API_KEY not set.");
+      res
+        .status(500)
+        .json({ error: "AI is not configured on the server (no API key)." });
+      return;
+    }
+
+    const { userId, message } = req.body || {};
+    if (!userId || !message) {
+      logger.warn("❌ Missing userId or message", { body: req.body });
+      res.status(400).json({ error: "Missing userId or message" });
+      return;
+    }
+
+    /* ============================
+       1) Load user's tasks (REAL-TIME SAFE)
+       ============================ */
+    let tasksText =
+      "The user currently has no saved tasks in their workspace. Give advice for starting from scratch or planning new tasks.";
+
+    try {
+      const boardsSnap = await db
+        .collection("users")
+        .doc(userId)
+        .collection("boards")
+        .get();
+
+      const userTasks = [];
+
+      for (const board of boardsSnap.docs) {
+        const tasksSnap = await board.ref.collection("tasks").get();
+        tasksSnap.forEach((t) => userTasks.push(t));
+      }
+
+      if (userTasks.length > 0) {
+        const normalized = userTasks.map((d) => {
+          const t = d.data();
+          const dueRaw = t.dueDate?.toDate
+            ? t.dueDate.toDate()
+            : t.dueDate
+            ? new Date(t.dueDate)
+            : null;
+
+          return {
+            title: t.title || "Untitled task",
+            status: t.status || "Todo",
+            priority: t.priority || "Normal",
+            dueTs: dueRaw ? dueRaw.getTime() : Number.POSITIVE_INFINITY,
+            dueStr: dueRaw
+              ? dueRaw.toLocaleString("en-PH", {
+                  timeZone: APP_TIME_ZONE,
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })
+              : "no deadline",
+          };
+        });
+
+        normalized.sort((a, b) => a.dueTs - b.dueTs);
+        const top = normalized.slice(0, 25);
+
+        tasksText =
+          "Here is the user's current task list:\n\n" +
+          top
+            .map(
+              (t, idx) =>
+                `${idx + 1}. [${t.status}] ${t.title} — priority: ${
+                  t.priority
+                }, deadline: ${t.dueStr}`
+            )
+            .join("\n");
+      }
+    } catch (err) {
+      logger.error("❌ Failed to load real tasks:", err);
+    }
+
+    /* ============================
+       2) Build prompt for Gemini
+       ============================ */
+
+    const systemText = `
+You are an experienced, calm productivity coach inside an app called Task Master.
+You speak like a thoughtful human coworker or manager: professional, clear, and
+encouraging – not overly hyped or robotic.
+
+Guidelines for your replies:
+- First, briefly reflect what you understand about the user's situation
+  (1–2 sentences maximum).
+- Then give 2–4 specific recommendations, prioritised using the task list
+  you are given (deadlines, priority, and status).
+- Be concrete: mention task types or patterns (e.g. "finish the presentation
+  that's due soon", "handle one quick admin task") rather than only generic tips.
+- Keep answers focused and not too long (aim for 2–5 short paragraphs total).
+- Use a neutral, professional tone. Emojis are optional and should be used
+  sparingly (at most one per reply, and only if it fits).
+- End with a short question that helps the user take the next step, such as
+  "Would that plan work for the next hour?" or "Do you want help breaking
+  one of these tasks into smaller steps?".
+`.trim();
+
+    const fullPrompt = `
+${systemText}
+
+Below is a summary of the user's current tasks from their boards.
+Use this information when deciding what they should focus on.
+If the list is empty or very small, help them decide what to work on
+or how to plan new tasks.
+
+TASK SUMMARY
+------------
+${tasksText}
+
+USER QUESTION
+-------------
+"${message}"
+
+Now give a single, coherent answer following the guidelines above.
+Do not show the raw task list back to the user; instead, turn it into
+clear recommendations and a short, realistic plan.
+`.trim();
+
+    /* ============================
+       3) Call Gemini
+       ============================ */
+
+    const endpoint = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+
+    const geminiBody = {
+      contents: [
+        {
+          role: "user",
+          parts: [{ text: fullPrompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        maxOutputTokens: 2048,
+      },
+    };
+
+    // 🔍 Log exactly what we're sending to Gemini
+    logger.info("📤 Gemini request body (aiCoachLite)", { geminiBody });
+
+    const geminiRes = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(geminiBody),
+    });
+
+    if (!geminiRes.ok) {
+      const errorText = await geminiRes.text();
+      logger.error("❌ Gemini HTTP error (aiCoachLite):", {
+        status: geminiRes.status,
+        body: errorText,
+      });
+      res
+        .status(500)
+        .json({ error: "Gemini request failed", details: errorText });
+      return;
+    }
+
+    const geminiData = await geminiRes.json();
+
+    logger.info("✅ Gemini response (aiCoachLite)", {
+      candidatesCount: geminiData?.candidates?.length || 0,
+      finishReasons: geminiData?.candidates?.map((c) => c.finishReason),
+    });
+
+    const candidate = geminiData?.candidates?.[0];
+
+    if (!candidate || !candidate.content?.parts?.length) {
+      logger.warn("⚠️ Gemini returned no text content", { geminiData });
+      res.status(200).json({
+        reply:
+          "I wasn't able to get a full answer from the AI just now (it returned an empty response). Try rephrasing your question or asking something a bit simpler.",
+      });
+      return;
+    }
+
+    const reply = candidate.content.parts
+      .map((p) => p.text || "")
+      .join("")
+      .trim();
+
+    res.status(200).json({ reply });
+  } catch (err) {
+    logger.error("❌ aiCoachLite error:", {
+      message: err.message,
+      stack: err.stack,
+    });
+    res.status(500).json({
+      error: "Something went wrong with the AI productivity coach.",
+      details: err.message,
+    });
   }
 });

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import BoardCard from "../components/BoardCard";
 import { motion, AnimatePresence } from "framer-motion";
+import AiCoachChat from "../components/AiCoachChat";
 import {
   Home,
   LayoutGrid,
@@ -208,6 +209,9 @@ const Dashboard = () => {
     });
     return () => unsubscribe();
   }, [user]);
+
+  // This is for the AI CHAT
+   
 
   // Load tasks
   useEffect(() => {
@@ -627,6 +631,7 @@ const Dashboard = () => {
                 <Calendar size={20} /> View Your Plans
               </button>
             </div>
+            
 
             {/* ⭐ Next Plan Carousel Card */}
             <div className="bg-white dark:bg-slate-800 shadow-md rounded-2xl p-6 mb-8 border border-slate-200 dark:border-slate-700 transition-colors">
@@ -663,6 +668,7 @@ const Dashboard = () => {
                     </div>
                   )}
                 </div>
+
 
                 <button
                   onClick={() => navigate("/planner")}
@@ -714,6 +720,10 @@ const Dashboard = () => {
                       </p>
                     )}
 
+                    
+
+
+
                     {/* ⏳ Duration + Time Left (synced with planner) */}
                     <PlanCountdown
                       createdAt={currentPlan.createdAt}
@@ -734,6 +744,9 @@ const Dashboard = () => {
               )}
             </div>
           </>
+            
+
+
         ) : (
           /* ===== Boards Page ===== */
           <div className="bg-white dark:bg-slate-900 shadow-md rounded-2xl p-6 border border-slate-200 dark:border-slate-700">
@@ -865,6 +878,7 @@ const Dashboard = () => {
                   {guideSteps[guideStep].actionLabel} →
                 </button>
               )}
+              
 
               <div className="flex items-center justify-between mt-2">
                 <div className="text-xs text-slate-500 dark:text-slate-400">
@@ -892,14 +906,23 @@ const Dashboard = () => {
                     >
                       Next
                     </button>
+
+                    
                   )}
+                  
                 </div>
               </div>
             </div>
           </div>
+          
         )}
       </motion.div>
+      <div className="relative min-h-screen">
+      {/* existing layout */}
+      <AiCoachChat />
     </div>
+    </div>
+    
   );
 };
 

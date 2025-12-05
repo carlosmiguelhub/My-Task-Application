@@ -12,6 +12,7 @@ const firebaseConfig = {
   storageBucket: "taskmaster-app-642b7.appspot.com", // 🔹 FIXED HERE
   messagingSenderId: "874779590659",
   appId: "1:874779590659:web:12f793dd47d88070ff0e36",
+  
 };
 
 const app = initializeApp(firebaseConfig);
