@@ -706,9 +706,8 @@ export const debugUpcomingPlansWindow = onRequest(async (req, res) => {
     res.status(500).send(String(err));
   }
 });
-
 /* ==========================================================
-   🤖 AI COACH LITE — Gemini + real tasks (Firestore)
+   🤖 AI COACH LITE — Gemini + real tasks (Firestore + chat history)
    ========================================================== */
 
 export const aiCoachLite = onRequest({ cors: true }, async (req, res) => {
@@ -739,6 +738,9 @@ export const aiCoachLite = onRequest({ cors: true }, async (req, res) => {
       return;
     }
 
+    const userDocRef = db.collection("users").doc(userId);
+    const chatsRef = userDocRef.collection("aiCoachChats");
+
     /* ============================
        1) Load user's tasks (REAL-TIME SAFE)
        ============================ */
@@ -746,12 +748,7 @@ export const aiCoachLite = onRequest({ cors: true }, async (req, res) => {
       "The user currently has no saved tasks in their workspace. Give advice for starting from scratch or planning new tasks.";
 
     try {
-      const boardsSnap = await db
-        .collection("users")
-        .doc(userId)
-        .collection("boards")
-        .get();
-
+      const boardsSnap = await userDocRef.collection("boards").get();
       const userTasks = [];
 
       for (const board of boardsSnap.docs) {
@@ -804,7 +801,39 @@ export const aiCoachLite = onRequest({ cors: true }, async (req, res) => {
     }
 
     /* ============================
-       2) Build prompt for Gemini
+       2) Load recent chat history
+       ============================ */
+
+    let historyText = "No previous conversation with this user.";
+    try {
+      const historySnap = await chatsRef
+        .orderBy("createdAt", "desc")
+        .limit(8) // last 8 messages (user + assistant)
+        .get();
+
+      const history = [];
+      historySnap.forEach((doc) => history.push(doc.data()));
+      history.reverse(); // oldest → newest
+
+      if (history.length > 0) {
+        historyText =
+          history
+            .map((m, idx) => {
+              const role = m.role === "assistant" ? "Coach" : "User";
+              const text =
+                typeof m.content === "string"
+                  ? m.content.slice(0, 300) // safety trim
+                  : "";
+              return `${idx + 1}. ${role}: ${text}`;
+            })
+            .join("\n") || historyText;
+      }
+    } catch (err) {
+      logger.error("❌ Failed to load AI coach history:", err);
+    }
+
+    /* ============================
+       3) Build prompt for Gemini
        ============================ */
 
     const systemText = `
@@ -830,26 +859,25 @@ Guidelines for your replies:
     const fullPrompt = `
 ${systemText}
 
-Below is a summary of the user's current tasks from their boards.
-Use this information when deciding what they should focus on.
-If the list is empty or very small, help them decide what to work on
-or how to plan new tasks.
+PREVIOUS CONVERSATION (most recent last)
+----------------------------------------
+${historyText}
 
 TASK SUMMARY
 ------------
 ${tasksText}
 
-USER QUESTION
--------------
+NEW USER MESSAGE
+----------------
 "${message}"
 
 Now give a single, coherent answer following the guidelines above.
-Do not show the raw task list back to the user; instead, turn it into
-clear recommendations and a short, realistic plan.
+Do not show the raw task list or the full conversation back to the user;
+instead, turn it into clear recommendations and a short, realistic plan.
 `.trim();
 
     /* ============================
-       3) Call Gemini
+       4) Call Gemini
        ============================ */
 
     const endpoint = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
@@ -867,7 +895,6 @@ clear recommendations and a short, realistic plan.
       },
     };
 
-    // 🔍 Log exactly what we're sending to Gemini
     logger.info("📤 Gemini request body (aiCoachLite)", { geminiBody });
 
     const geminiRes = await fetch(endpoint, {
@@ -910,6 +937,28 @@ clear recommendations and a short, realistic plan.
       .map((p) => p.text || "")
       .join("")
       .trim();
+
+    /* ============================
+       5) Save this turn to Firestore
+       ============================ */
+
+    try {
+      const now = FieldValue.serverTimestamp();
+      await Promise.all([
+        chatsRef.add({
+          role: "user",
+          content: message,
+          createdAt: now,
+        }),
+        chatsRef.add({
+          role: "assistant",
+          content: reply,
+          createdAt: now,
+        }),
+      ]);
+    } catch (err) {
+      logger.error("⚠️ Failed to save AI coach messages:", err);
+    }
 
     res.status(200).json({ reply });
   } catch (err) {
